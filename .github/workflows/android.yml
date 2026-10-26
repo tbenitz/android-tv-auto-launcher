@@ -29,11 +29,15 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android platform and build tools
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      # ubuntu-latest already includes Android SDK command-line tools.
+      # Avoid android-actions/setup-android@v3: recent SDK distributions dropped
+      # the legacy 'tools' package that this action tries to install.
+      - name: Ensure Android platform and build tools
+        shell: bash
+        run: |
+          SDKMANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
 
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace :app:assembleDebug
