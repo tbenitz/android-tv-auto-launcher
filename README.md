@@ -51,6 +51,38 @@ adb shell cmd package resolve-activity -a android.intent.action.MAIN -c android.
 
 **Important:** Some certified Google TV/Android TV devices force their manufacturer/Google Home UI even after this command. This is a device/firmware limitation, not something an ordinary APK can bypass. The app deliberately does not abuse Accessibility or overlays, and it does not disable system packages automatically. Do **not** blindly disable TV launcher or setup-wizard packages; this can leave you without a usable Home screen. If a device cannot set this app as its default Home, boot autostart is not guaranteed.
 
+## Mi Box / Mi Box S: Home chooser doesn't open
+
+The app **already declares itself as a HOME launcher**. Some Mi Box firmware ignores the default Home picker; modifying the APK manifest or a system file will not solve that firmware restriction. Version 1.0.1 adds a **Mi Box / Home setup help** button to the app.
+
+1. Install TV Auto Launch, open it from Apps, choose your startup target, and leave Auto-launch ON.
+2. On the Mi Box go to **Settings → Device Preferences → About → Build**, press OK seven times, and enable the available debugging method under **Developer options**.
+3. Find the TV IP address in Network settings. From a computer or Android phone with an ADB client on the same network, connect and assign the launcher:
+
+\`\`\`bash
+adb connect TV_IP:5555
+adb shell cmd package set-home-activity io.github.tbenitz.tvautolaunch/.MainActivity
+adb shell cmd package resolve-activity -a android.intent.action.MAIN -c android.intent.category.HOME
+\`\`\`
+
+Port \`5555\` is typical only for network ADB; modern Wireless debugging may require a pairing code and a different port. Press Home to test and reboot to verify automatic startup. Some Xiaomi firmware ignores the assigned Home even when the command reports success.
+
+**Advanced fallback, only if the Mi Box is still forcing its original launcher:** First confirm its package is exactly \`com.google.android.tvlauncher\`, that TV Auto Launch opens from Apps, and that you can recover using ADB. Then disable **only** that confirmed competing launcher:
+
+\`\`\`bash
+adb shell pm disable-user --user 0 com.google.android.tvlauncher
+\`\`\`
+
+**Recovery (save this command before changing anything):**
+
+\`\`\`bash
+adb shell pm enable --user 0 com.google.android.tvlauncher
+\`\`\`
+
+Google TV devices may have a different original launcher such as \`com.google.android.apps.tv.launcherx\`. Don't blindly disable multiple packages, uninstall the original Home app, or disable any setup/system service. Losing Home can require ADB recovery. If you prefer an interface, [TV Box Tools](https://github.com/smartago/tvboxtools) can manage Android TV Home selection using ADB. No root is necessary.
+
+**APK upgrade:** Version 1.0.0 was debug-signed in CI. If production signing secrets have not been configured, 1.0.1 is signed with a different temporary key and Android will refuse an in-place upgrade. Restore a working original Home if necessary, uninstall the old APK, install the new APK and reselect your startup target.
+
 ## Restore your original Home launcher
 
 - Open Android settings (or TV Auto Launch → Android TV settings), search for default apps/Home, then choose your original launcher.

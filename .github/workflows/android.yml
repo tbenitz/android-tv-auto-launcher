@@ -84,24 +84,25 @@ jobs:
             TVAutoLaunch.apk.sha256
           if-no-files-found: error
 
-      # Bootstrap release: first successful push to main creates v1.0.0 and
-      # makes the static site's /releases/latest/download/TVAutoLaunch.apk work.
-      # Since no keystore secret is configured initially, this is debug signed.
-      # Subsequent main pushes do NOT overwrite a public version silently.
-      - name: Publish initial public download automatically (once)
+      # Publish a public version once after its first successful main build.
+      # Existing releases are never overwritten on later main pushes.
+      - name: Publish new-version public APK from main
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            echo 'v1.0.0 already exists; keeping published binaries unchanged.'
+          VERSION=$(sed -n "s/^[[:space:]]*versionName '\([^']*\)'.*/\1/p" app/build.gradle | head -n 1)
+          test -n "$VERSION"
+          TAG="v$VERSION"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release $TAG exists; preserving published binaries."
           else
-            gh release create v1.0.0 TVAutoLaunch.apk TVAutoLaunch.apk.sha256 \
+            gh release create "$TAG" TVAutoLaunch.apk TVAutoLaunch.apk.sha256 \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title 'TV Auto Launch v1.0.0' \
-              --notes 'First public build. This APK is debug-signed with a CI key; future builds may require uninstalling the old APK unless stable release signing secrets are configured. Settings are lost on uninstall. To verify this download, check TVAutoLaunch.apk.sha256.'
+              --title "TV Auto Launch $TAG" \
+              --notes 'Automated GitHub Actions build. Unless signing secrets are configured, APK uses a temporary CI debug key. Earlier debug-signed builds may need to be uninstalled first. See README for Mi Box HOME setup and recovery.'
           fi
 
       - name: Publish tagged public release

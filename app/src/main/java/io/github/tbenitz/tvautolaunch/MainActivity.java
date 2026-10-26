@@ -1,8 +1,11 @@
 package io.github.tbenitz.tvautolaunch;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.role.RoleManager;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -150,6 +153,7 @@ public final class MainActivity extends Activity {
         });
         addButton(left, "▶  Launch selected app", false, v -> launchChosen(false));
         addButton(left, "⌂  Set as default Home", false, v -> requestHomeRole());
+        addButton(left, "ⓘ  Mi Box / Home setup help", false, v -> showHomeSetup());
         homeView = text("Checking default launcher…", 12, MUTED, false);
         left.addView(homeView, lp(-1, -2, 8, 0, 4, 8));
         addButton(left, "↻  Refresh installed apps", false, v -> loadApps());
@@ -274,7 +278,7 @@ public final class MainActivity extends Activity {
         if (homeView != null) {
             boolean home = isDefaultHome();
             homeView.setText(home ? "✓ This app is your default Home launcher"
-                    : "! Not default Home yet. Choose Home above.");
+                    : "! Home not assigned. Mi Box? Choose setup help.");
             homeView.setTextColor(home ? AQUA : GOLD);
         }
     }
@@ -306,19 +310,54 @@ public final class MainActivity extends Activity {
                     startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_HOME), 100);
                     return;
                 }
-            } catch (RuntimeException ignored) {}
+            } catch (RuntimeException ignored) {
+                showHomeSetup();
+                return;
+            }
         }
         try {
             startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
         } catch (ActivityNotFoundException | SecurityException e) {
-            Toast.makeText(this, "Home selection is blocked on this TV. See the GitHub setup guide for ADB steps.", Toast.LENGTH_LONG).show();
+            showHomeSetup();
         }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == 100) updateStatus();
+        if (requestCode == 100) {
+            updateStatus();
+            if (resultCode != RESULT_OK && !isDefaultHome()) showHomeSetup();
+        }
+    }
+
+    /** Some Xiaomi / Google TV builds ignore the regular Home chooser. */
+    private void showHomeSetup() {
+        final String command = "adb shell cmd package set-home-activity "
+                + getPackageName() + "/.MainActivity";
+        String instructions = "TV Auto Launch is already registered as an Android Home app. "
+                + "Some Mi Box firmware hides the Home picker.\\n\\n"
+                + "1. TV Settings > Device Preferences > About > Build (press 7 times).\\n"
+                + "2. Under Developer options enable debugging.\\n"
+                + "3. From an ADB client on a phone or computer, connect to the TV and run:\\n\\n"
+                + command + "\\n\\n"
+                + "4. Press HOME, then restart the Mi Box.\\n\\n"
+                + "If Home still opens the stock launcher, see the website's Mi Box "
+                + "setup and undo guide. Never disable the stock launcher without "
+                + "a working replacement and a recovery ADB connection.";
+        new AlertDialog.Builder(this)
+                .setTitle("Mi Box / Home setup")
+                .setMessage(instructions)
+                .setPositiveButton("Copy command", (dialog, which) -> {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Set Android TV Home", command));
+                        Toast.makeText(this, "ADB command copied", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNeutralButton("TV settings", (dialog, which) -> openSystemSettings())
+                .setNegativeButton("Close", null)
+                .show();
     }
 
     private void openSystemSettings() {
