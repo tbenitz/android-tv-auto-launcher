@@ -690,7 +690,7 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Mi Box Home and recovery")
                 .setMessage("Use an ADB client on your Android phone on the same Wi-Fi.\n\n"
                     + "Set Home from an ADB shell:\n"
-                    + "cmd package set-home-activity " + app + "/.MainActivity\n\n"
+                    + "cmd package set-home-activity " + app + "/io.github.tbenitz.tvautolaunch.MainActivity\n\n"
                     + "If this launcher ever stops responding, FIRST re-enable your verified original "
                     + "Home package, THEN disable this app. Typical Mi Box recovery:\n\n"
                     + restore + "\n\nOnly use the first command when that stock package is actually installed.")
