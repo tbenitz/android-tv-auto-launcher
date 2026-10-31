@@ -100,7 +100,7 @@ jobs:
           else
             gh release create "$TAG" TVAutoLaunch.apk TVAutoLaunch.apk.sha256 \
               --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
+              --target "$GITHUB_SHA" --prerelease \
               --title "TV Auto Launch $TAG" \
               --notes 'Automated GitHub Actions build. Unless signing secrets are configured, APK uses a temporary CI debug key. Earlier debug-signed builds may need to be uninstalled first. See README for Mi Box HOME setup and recovery.'
           fi
