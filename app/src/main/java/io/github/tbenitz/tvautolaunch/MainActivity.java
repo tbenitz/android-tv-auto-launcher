@@ -214,16 +214,16 @@ public final class MainActivity extends Activity {
         statusText = null;
         handler.removeCallbacks(clockUpdater);
         LinearLayout root = column();
-        root.setPadding(dp(30), dp(18), dp(30), dp(18));
+        root.setPadding(dp(26), dp(12), dp(26), dp(12));
         root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{backgroundColor(), isDark() ? 0xff171d27 : 0xff10324a, backgroundColor()}));
         setContentView(root);
 
         LinearLayout header = row();
         header.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(header, new LinearLayout.LayoutParams(-1, dp(60)));
+        root.addView(header, new LinearLayout.LayoutParams(-1, dp(55)));
         LinearLayout wordmark = column();
-        wordmark.addView(text("TV  •  AUTO LAUNCH", 11, CYAN, true));
+        wordmark.addView(text("ORBIT  •  TV LAUNCHER", 11, CYAN, true));
         wordmark.addView(text(selected == HOME ? "Home" : selected == APPS ? "All apps" : "Settings",
                 26, WHITE, true));
         header.addView(wordmark, new LinearLayout.LayoutParams(0, -2, 1));
@@ -255,13 +255,13 @@ public final class MainActivity extends Activity {
         hero.setGravity(Gravity.CENTER_VERTICAL);
         hero.setPadding(dp(16), dp(12), dp(14), dp(12));
         hero.setBackground(panel(surfaceColor(), 16, 0xff3e6b83));
-        root.addView(hero, margins(-1, 112, 0, 16, 0, 10));
+        root.addView(hero, margins(-1, 94, 0, 8, 0, 6));
         String selected = prefs.getString("chosen_package", "");
         Entry target = allApps.get(selected);
         ImageView icon = new ImageView(this);
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         icon.setImageDrawable(target != null ? target.icon : getDrawable(android.R.drawable.sym_def_app_icon));
-        hero.addView(icon, margins(58, 58, 0, 0, 17, 0));
+        hero.addView(icon, margins(49, 49, 0, 0, 15, 0));
         LinearLayout caption = column();
         caption.addView(text("YOUR STARTUP APP", 11, CYAN, true));
         caption.addView(text(selected.isEmpty() ? "Choose a startup app"
@@ -279,16 +279,33 @@ public final class MainActivity extends Activity {
 
         LinearLayout heading = row();
         heading.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(heading, margins(-1, 49, 0, 0, 0, 3));
+        root.addView(heading, margins(-1, 43, 0, 0, 0, 3));
         heading.addView(text("Your favorites", 23, WHITE, true));
-        heading.addView(text("    D-pad to browse  •  OK for options", 12, MUTED, false));
+        heading.addView(text("    OK to open  •  Hold OK or MENU for options", 12, MUTED, false));
         heading.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        heading.addView(button("Manage selected", this::manageSelected, false),
+                margins(-2, 41, 0, 0, 8, 0));
         heading.addView(button("+ Add apps", () -> showPage(APPS), false),
                 margins(-2, 41, 0, 0, 0, 0));
 
         FrameLayout content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         createGrid(content, 5, true);
+
+        LinearLayout tools = row();
+        tools.setGravity(Gravity.CENTER_VERTICAL);
+        root.addView(tools, margins(-1, 47, 0, 5, 0, 0));
+        tools.addView(button("↓  APK Center", this::openApkCenter, false),
+                margins(-2, 45, 0, 0, 10, 0));
+        tools.addView(button("▦  All apps", () -> showPage(APPS), false),
+                margins(-2, 45, 0, 0, 10, 0));
+        tools.addView(button("⚙  Device settings", () -> {
+            try { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+            catch (RuntimeException error) { Toast.makeText(this,
+                    "Device settings unavailable", Toast.LENGTH_SHORT).show(); }
+        }, false), margins(-2, 45, 0, 0, 10, 0));
+        tools.addView(button("ⓘ  Recovery", this::showRecoveryHelp, false),
+                margins(-2, 45, 0, 0, 0, 0));
 
         statusText = text("", 12, MUTED, false);
         root.addView(statusText, margins(-1, -2, 0, 8, 0, 0));
@@ -320,12 +337,14 @@ public final class MainActivity extends Activity {
             }
             @Override public void afterTextChanged(Editable e) { }
         });
-        bar.addView(button("↻ Refresh", () -> scanApps(), false), margins(-2, 44, 14, 0, 0, 0));
+        bar.addView(button("↻ Refresh", () -> scanApps(), false), margins(-2, 44, 14, 0, 8, 0));
+        bar.addView(button("Manage selected", this::manageSelected, false),
+                margins(-2, 44, 0, 0, 0, 0));
 
         FrameLayout content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         createGrid(content, 5, false);
-        statusText = text("Select an app for Open, Favorite, or Set startup.  •  BACK returns Home",
+        statusText = text("OK opens  •  Hold OK or MENU to manage  •  BACK returns Home",
                 12, MUTED, false);
         root.addView(statusText, margins(-1, -2, 0, 9, 0, 0));
         if (grid != null) grid.requestFocus();
@@ -334,7 +353,7 @@ public final class MainActivity extends Activity {
     private void createGrid(FrameLayout frame, int defaultColumns, boolean favoritesOnly) {
         grid = new GridView(this);
         grid.setNumColumns(prefs.getInt("grid_columns", defaultColumns));
-        grid.setVerticalSpacing(dp(12));
+        grid.setVerticalSpacing(dp(8));
         grid.setHorizontalSpacing(dp(12));
         grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
         grid.setPadding(dp(4), dp(4), dp(4), dp(8));
@@ -348,7 +367,8 @@ public final class MainActivity extends Activity {
         grid.setAdapter(adapter);
         grid.setOnItemClickListener((parent, view, position, id) -> {
             if (position < 0 || position >= displayed.size()) return;
-            showAppOptions(displayed.get(position));
+            Entry selected = displayed.get(position);
+            openApp(selected.pkg, selected.cls, true);
         });
         grid.setOnItemLongClickListener((parent, view, position, id) -> {
             if (position < 0 || position >= displayed.size()) return false;
@@ -383,6 +403,16 @@ public final class MainActivity extends Activity {
         if (adapter != null) adapter.notifyDataSetChanged();
     }
 
+    private void manageSelected() {
+        if (displayed.isEmpty()) {
+            Toast.makeText(this, "Choose an app first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int position = grid == null ? -1 : grid.getSelectedItemPosition();
+        if (position < 0 || position >= displayed.size()) position = 0;
+        showAppOptions(displayed.get(position));
+    }
+
     private void showAppOptions(Entry item) {
         if (!alive) return;
         boolean pinned = favorites.contains(item.pkg);
@@ -392,7 +422,8 @@ public final class MainActivity extends Activity {
                 "★  Set as startup app",
                 "←  Move left in favorites",
                 "→  Move right in favorites",
-                "ⓘ  Android app information"
+                "ⓘ  Android app information",
+                "×  Uninstall app (Android confirmation)"
         };
         new AlertDialog.Builder(this).setTitle(item.label)
                 .setItems(actions, (dlg, which) -> {
@@ -408,6 +439,13 @@ public final class MainActivity extends Activity {
                         case 3: moveFavorite(item.pkg, -1); break;
                         case 4: moveFavorite(item.pkg, 1); break;
                         case 5: openAppInfo(item.pkg); break;
+                        case 6:
+                            try { startActivity(new Intent(Intent.ACTION_DELETE,
+                                    android.net.Uri.parse("package:" + item.pkg))); }
+                            catch (RuntimeException error) {
+                                Toast.makeText(this, "Uninstaller unavailable", Toast.LENGTH_SHORT).show();
+                            }
+                            break;
                     }
                 })
                 .setNegativeButton("Close", null).show();
@@ -460,7 +498,8 @@ public final class MainActivity extends Activity {
                 "Open Android TV system settings",
                 "Check / set default Home",
                 "Mi Box debugging and recovery instructions",
-                "Clear startup app (keep favorites)"
+                "Clear startup app (keep favorites)",
+                "APK Center  •  GitHub, direct links, USB and F-Droid"
         };
         ListView list = new ListView(this);
         list.setDividerHeight(dp(8));
@@ -481,7 +520,7 @@ public final class MainActivity extends Activity {
         });
         list.setOnItemClickListener((parent, view, position, id) -> settingsAction(position));
         root.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
-        root.addView(text("BACK  Home    •    No account, ads or internet required", 12, MUTED, false));
+        root.addView(text("BACK  Home    •    No account or ads    •    Network used only by APK Center", 12, MUTED, false));
         list.requestFocus();
     }
 
@@ -522,6 +561,7 @@ public final class MainActivity extends Activity {
                 break;
             case 8: requestHomeRole(); break;
             case 9: showRecoveryHelp(); break;
+            case 11: openApkCenter(); break;
             case 10:
                 new AlertDialog.Builder(this).setTitle("Clear startup selection?")
                     .setMessage("Your favorites stay. The launcher will open normally after a restart.")
@@ -569,7 +609,7 @@ public final class MainActivity extends Activity {
                     // Refresh the startup icon/label without disturbing focus.
                     showPage(HOME);
                 } else if (page == APPS && statusText != null) {
-                    statusText.setText(found.size() + " installed apps   •   OK to manage   •   BACK for Home");
+                    statusText.setText(found.size() + " installed apps   •   OK opens   •   Hold OK for options");
                     if (grid != null) grid.requestFocus();
                 }
             });
@@ -628,6 +668,26 @@ public final class MainActivity extends Activity {
                     Toast.LENGTH_LONG).show();
             return false;
         }
+    }
+
+    private void openApkCenter() {
+        try { startActivity(new Intent(this, ApkCenterActivity.class)); }
+        catch (RuntimeException error) {
+            Toast.makeText(this, "Could not open APK Center", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        if ((keyCode == android.view.KeyEvent.KEYCODE_MENU
+                || keyCode == android.view.KeyEvent.KEYCODE_INFO)
+                && grid != null && (page == HOME || page == APPS)) {
+            int selected = grid.getSelectedItemPosition();
+            if (selected >= 0 && selected < displayed.size()) {
+                showAppOptions(displayed.get(selected));
+                return true;
+            }
+        }
+        return super.onKeyDown(keyCode, event);
     }
 
     private void openAppInfo(String pkg) {
@@ -795,24 +855,24 @@ public final class MainActivity extends Activity {
             Entry e = displayed.get(position);
             LinearLayout tile = column();
             tile.setGravity(Gravity.CENTER);
-            tile.setPadding(dp(9), dp(8), dp(9), dp(8));
+            tile.setPadding(dp(6), dp(6), dp(6), dp(6));
             tile.setBackground(panel(surfaceColor(), 15, 0xff45647b));
             ImageView icon = new ImageView(MainActivity.this);
             icon.setImageDrawable(e.icon != null ? e.icon
                     : getDrawable(android.R.drawable.sym_def_app_icon));
             icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            tile.addView(icon, margins(62, 62, 0, 0, 0, 8));
-            TextView label = text(e.label, 15, WHITE, true);
+            tile.addView(icon, margins(49, 49, 0, 0, 0, 6));
+            TextView label = text(e.label, 14, WHITE, true);
             label.setGravity(Gravity.CENTER);
             label.setSingleLine(true);
             label.setEllipsize(android.text.TextUtils.TruncateAt.END);
             tile.addView(label, margins(-1, -2, 0, 0, 0, 5));
             boolean startup = e.pkg.equals(prefs.getString("chosen_package", ""));
-            TextView note = text(startup ? "★ STARTUP" : favorites.contains(e.pkg) ? "★ FAVORITE" : "OK  OPTIONS",
+            TextView note = text(startup ? "★ STARTUP" : favorites.contains(e.pkg) ? "★ FAVORITE" : "OK  OPEN",
                     10, startup ? GOLD : MUTED, true);
             note.setGravity(Gravity.CENTER);
             tile.addView(note);
-            tile.setLayoutParams(new AbsListView.LayoutParams(-1, dp(139)));
+            tile.setLayoutParams(new AbsListView.LayoutParams(-1, dp(108)));
             return tile;
         }
     }

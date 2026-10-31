@@ -11,8 +11,8 @@ android {
         applicationId 'io.github.tbenitz.tvautolaunch'
         minSdk 23
         targetSdk 35
-        versionCode 6
-        versionName '1.2.0-rc2'
+        versionCode 7
+        versionName '2.0.0-preview1'
     }
 
     // A signed release APK can be produced with GitHub Actions signing secrets.
