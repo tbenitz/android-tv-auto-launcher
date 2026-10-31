@@ -1,4 +1,4 @@
-# PirateFlix TV 2.2 — Android TV grid + native playback
+# PirateFlix TV 2.3 — Android TV grid + native playback
 
 This Android TV browser wraps `https://pirate-flix.pages.dev/` and builds a TV-friendly browsing interface from the **actual page content** (not a hard-coded catalog). Android System WebView must be installed and the site must be reachable.
 
@@ -29,3 +29,13 @@ GitHub Actions builds a debug APK after changes to the `pirateflix-tv-wrapper` b
 Requirements: Android TV 6.0+, Android System WebView, network access. Media3 1.5.1 is included at build time. Debug APK signatures may differ between Actions runs; if an upgrade reports a signature conflict, uninstall and reinstall (this clears local app data).
 
 **Not yet verified on physical TV hardware.** The web site can change HTML/JavaScript independently of this app, so poster and channel extraction requires follow-up testing against the actual live site.
+
+## v2.3 — Sources, auto fullscreen, and fallback seeking
+
+- **When selecting a movie**, the app now retries fullscreen promotion while an embedded player loads, rather than requiring the web player to be already playing. The site must still actually provide an open player; this does not bypass a host's play button or autoplay policy.
+- **Choose available sources (TV picker)** opens a native Android dialog listing real source/server controls identified on the page and, where supported, its embedded player. It provides a count and in-place selection. Some player providers never expose source controls to injected scripts; the website fallback remains available.
+- **Seeking inside embedded players** first attempts HTML5 `currentTime`, then checks for recognizable 10-second rewind/forward buttons in that player's own iframe. Repeated button clicks are rate-limited and capped per batch. A reported click count confirms commands were issued, **not** that the proprietary player's timeline actually moved. Players that hide controls or reject scripted clicks may remain unseekable.
+- **Native playback** automatically tries ordinary supported direct media URLs exposed by a video's `<video>` element (including those in frames on WebView versions supporting document-start scripts). For the manual native-player option, it may also use a recognized MP4/HLS/DASH/etc. URL that the WebView requested while opening the chosen title; it does **not** decrypt or bypass any protection or source authorization. Its video formats/codecs and live seeking remain constrained by Media3 and the device.
+- If native playback fails after starting, the app returns to the web player rather than repeatedly reopening the same failing URL.
+
+**Limitations:** A player inside an inaccessible or protected iframe cannot be made universally controllable. A request URL alone may lack required cookies, headers, expiring tokens or codecs, and a DRM-protected stream is not transferable to an ordinary player. Source counts describe controls the app can discover, not the total hidden on a provider's server. Fullscreen still depends on the selected site's player becoming available.

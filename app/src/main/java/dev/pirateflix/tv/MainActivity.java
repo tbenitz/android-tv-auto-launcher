@@ -43,6 +43,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.json.JSONTokener;
 
 /** Native Android-TV remote layer around the first-party PirateFlix website. */
@@ -68,6 +69,11 @@ public final class MainActivity extends Activity {
     private String mediaFrameScript;
     private NativePlayerController nativePlayer;
     private int probeGeneration=0;
+    private String lastObservedMediaUrl="";
+    private long lastObservedMediaAt=0L;
+    private long watchProbeUntil=0L;
+    private String rejectedMediaUrl="";
+    private String lastNativeAttemptUrl="";
     private boolean clearHistoryOnHome;
     private boolean backHeld;
     private boolean backMenuShown;
@@ -115,7 +121,12 @@ public final class MainActivity extends Activity {
         applyImmersiveMode();
         buildLayout();
         nativePlayer=new NativePlayerController(this,root,new NativePlayerController.Events(){
-            @Override public void onError(String detail){ showStatus(detail); }
+            @Override public void onError(String detail){
+                rejectedMediaUrl=lastNativeAttemptUrl;
+                showStatus(detail + " • using website player");
+                evaluateTv("window.PFTV&&window.PFTV.resumeWebMedia()");
+                evaluateTv("window.PFTV&&window.PFTV.cinema(true)");
+            }
             @Override public void onClose(){ evaluateTv("window.PFTV&&window.PFTV.nativePip(false)"); }
             @Override public void onModeChanged(boolean pip){
                 evaluateTv("window.PFTV&&window.PFTV.nativePip("+pip+")");
@@ -242,10 +253,19 @@ public final class MainActivity extends Activity {
 
         browser.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                // Restrict blocking to known ad/malvertising hosts. Do not intercept video or source URLs.
+                // Observe known media manifest/file requests; do not proxy, download or
+                // decrypt network responses. The optional native fallback uses only URLs
+                // that the WebView itself has already requested.
                 Uri uri = request.getUrl();
                 if (isBlockedAdHost(uri.getHost())) {
                     return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
+                }
+                String requested = uri.toString();
+                if (android.os.SystemClock.uptimeMillis() < watchProbeUntil &&
+                    uri.getHost()!=null && isWebUrl(uri) &&
+                    requested.matches("(?i)^https?://.+\\.(m3u8|mpd|mp4|m4v|webm|mkv)([?#].*)?$")) {
+                    handler.post(() -> { lastObservedMediaUrl=requested;
+                        lastObservedMediaAt=android.os.SystemClock.uptimeMillis(); });
                 }
                 return null;
             }
@@ -450,8 +470,12 @@ public final class MainActivity extends Activity {
     }
 
     private void scheduleNativeProbes(){
+        watchProbeUntil=android.os.SystemClock.uptimeMillis()+25000L;
+        lastObservedMediaUrl="";
+        lastObservedMediaAt=0L;
+        rejectedMediaUrl="";
         final int token=++probeGeneration;
-        for(long delay:new long[]{850L,1900L,3600L,6700L})
+        for(long delay:new long[]{650L,1500L,2700L,4500L,8000L,12000L,18000L})
             handler.postDelayed(()->{if(token==probeGeneration)probeNativeStream(false);},delay);
     }
     private void probeNativeStream(boolean explicit){
@@ -460,16 +484,25 @@ public final class MainActivity extends Activity {
             try{
                 Object decoded=new JSONTokener(result).nextValue();
                 String raw=decoded instanceof String?(String)decoded:"";
-                if(raw.isEmpty()){if(explicit)showStatus("No direct video URL on this page. Choose a different source or use its web player.");return;}
-                JSONObject item=new JSONObject(raw);
+                JSONObject item=raw.isEmpty()?new JSONObject():new JSONObject(raw);
                 String url=item.optString("url",""),ref=item.optString("referer",HOME_URL);
+                if(url.isEmpty() && explicit &&
+                    android.os.SystemClock.uptimeMillis()-lastObservedMediaAt<30000L){
+                    url=lastObservedMediaUrl; ref=webView.getUrl();
+                }
+                if(url.isEmpty()){
+                    if(explicit)showStatus("No exposed playable media URL. The embedded website player remains available.");
+                    return;
+                }
+                if(url.equals(rejectedMediaUrl))return;
                 if(!nativePlayer.playable(url)){if(explicit)showStatus("This source cannot open in the native player");return;}
                 // Do not restart a playing stream on periodic checks.
                 if(nativePlayer.active() && !explicit)return;
+                lastNativeAttemptUrl=url;
                 if(nativePlayer.play(url,ref)){
-                    // Stop web video to prevent a duplicate audio stream underneath native playback.
-                    evaluateTv("document.querySelectorAll('video').forEach(v=>{try{v.pause()}catch(e){}})");
-                }
+                    // Avoid dual audio, including when the playing <video> belongs to an iframe.
+                    evaluateTv("window.PFTV&&window.PFTV.suspendWebMedia()");
+                } else rejectedMediaUrl=url;
             }catch(Exception ignored){if(explicit)showStatus("No supported direct media address available");}
         });
     }
@@ -739,7 +772,7 @@ public final class MainActivity extends Activity {
         final String[] options = {
                 "TV grid / Browse", "Website view (sources, episodes & details)",
                 "Go to PirateFlix Home", "Previous web page", "Play / Pause",
-                "Seek / Jump to position", "Change video source", "Fullscreen current player",
+                "Seek / Jump to position", "Choose available sources (TV picker)", "Fullscreen current player",
                 "Page zoom 40%–160%", "Player remote passthrough ON/OFF", "Reload website", "Exit app",
                 "Use native player (direct streams)", "Focus mini-player", "Close mini-player"
         };
@@ -757,10 +790,7 @@ public final class MainActivity extends Activity {
                     if (choice == 4){if(nativePlayer!=null&&nativePlayer.active())nativePlayer.toggle();
                         else evaluateTv("window.PFTV&&window.PFTV.togglePlayback()");}
                     if (choice == 5) showSeekMenu();
-                    if (choice == 6) {
-                        if (customVideoView != null) exitFullScreenVideo();
-                        evaluateTv("window.PFTV&&window.PFTV.chooseSources()");
-                    }
+                    if (choice == 6) showSourcesPicker();
                     if (choice == 7){if(nativePlayer!=null&&nativePlayer.active())nativePlayer.fullscreen();
                         else evaluateTv("window.PFTV&&window.PFTV.cinema(true)");}
                     if (choice == 8) showZoomMenu();
@@ -782,6 +812,55 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Cancel", null).create();
         dialog.setOnDismissListener(d -> applyImmersiveMode());
         dialog.show();
+    }
+
+    /** TV source chooser. Only real controls returned by the current webpage/frames
+     * are displayed. Selecting a source clicks its existing control in place. */
+    private void showSourcesPicker() {
+        if(webView==null||!isSiteUrl(webView.getUrl())) {
+            showStatus("Open a PirateFlix video to see its available sources"); return;
+        }
+        evaluateTv("window.PFTV&&window.PFTV.requestSources()");
+        handler.postDelayed(this::displaySourcesPicker,700L);
+    }
+
+    private void displaySourcesPicker() {
+        if(webView==null||!isSiteUrl(webView.getUrl()))return;
+        webView.evaluateJavascript("window.PFTV?window.PFTV.sourceList():'[]'", result->{
+            try {
+                Object decoded=new JSONTokener(result).nextValue();
+                String json=decoded instanceof String?(String)decoded:"[]";
+                JSONArray items=new JSONArray(json);
+                final int n=items.length();
+                String[] labels=new String[n+2];
+                for(int i=0;i<n;i++)labels[i]=items.getJSONObject(i).optString("label","Source "+(i+1));
+                labels[n]="Refresh source list";
+                labels[n+1]="Show website source controls (fallback)";
+                AlertDialog dlg=new AlertDialog.Builder(this)
+                    .setTitle(n+" available source"+(n==1?"":"s"))
+                    .setItems(labels,(d,index)->{
+                        if(index==n){
+                            evaluateTv("window.PFTV&&window.PFTV.chooseSources()");
+                            handler.postDelayed(this::displaySourcesPicker,750L);
+                        } else if(index==n+1){
+                            evaluateTv("window.PFTV&&window.PFTV.enterWebsite()");
+                            showStatus("Browse the site's source controls");
+                        } else {
+                            JSONObject source=items.optJSONObject(index);
+                            if(source==null)return;
+                            String type=source.optString("type",""),id=String.valueOf(source.optInt("id",-1));
+                            if(!type.equals("page")&&!type.equals("frame"))return;
+                            if(nativePlayer!=null && nativePlayer.active())nativePlayer.close(true);
+                            evaluateTv("window.PFTV&&window.PFTV.selectSource("+
+                                JSONObject.quote(type)+","+id+")");
+                            scheduleNativeProbes();
+                            handler.postDelayed(()->evaluateTv("window.PFTV&&window.PFTV.cinema(true)"),1100L);
+                        }
+                    }).setNegativeButton("Cancel",null).create();
+                dlg.setOnDismissListener(d->applyImmersiveMode());
+                dlg.show();
+            }catch(Exception ex){showStatus("Could not inspect source controls");}
+        });
     }
 
     private void showZoomMenu() {

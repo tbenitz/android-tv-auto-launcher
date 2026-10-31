@@ -1,14 +1,14 @@
-/* PirateFlix TV 2.1 — site-backed TV catalog and native remote adapter.
+/* PirateFlix TV 2.3 — site-backed TV catalog and native remote adapter.
  * No fabricated catalog entries. The website remains the source of navigation,
  * episode/stream selection, and user data. */
 (() => {
   'use strict';
   if (window !== window.top) return;
-  if (window.PFTV?.version === 5) { window.PFTV.zoom(window.__PFTV_ZOOM || 85); return; }
+  if (window.PFTV?.version === 7) { window.PFTV.zoom(window.__PFTV_ZOOM || 85); return; }
   const sections = ['Movies','TV Shows','Live TV','Watch Later'];
   const state = {mode:'tv', section:'Movies', area:'rail', rail:0, selected:0,
     cards:[], key:'', cinema:null, lastURL:location.href, zoom:85,
-    originalHeader:null, lastSeek:'', lastPlayer:false, nativePip:false, usFilterApplied:false, gatherStep:0, searching:false};
+    originalHeader:null, lastSeek:'', lastPlayer:false, nativePip:false, usFilterApplied:false, gatherStep:0, searching:false, watchUntil:0};
   const style=document.createElement('style');style.id='pftv-tv-css';
   style.textContent=`
   #pftv-shell{position:fixed!important;inset:0!important;z-index:2147483000!important;
@@ -257,12 +257,12 @@
   }
   function openCard(i){
     const c=state.cards[i];if(!c||!c.target?.isConnected){refresh(true);toast('Content changed; try again');return;}
-    state.selected=i;state.lastPlayer=false;shell.classList.add('is-switching');setTimeout(()=>{enterWebsite();shell.classList.remove('is-switching');},190);
+    state.selected=i;state.lastPlayer=false;state.watchUntil=Date.now()+30000;shell.classList.add('is-switching');setTimeout(()=>{enterWebsite();shell.classList.remove('is-switching');},190);
     // Click the media image first, which bubbles to the actual card listener,
     // not its separate Favorite button.
     setTimeout(()=>{if(c.sourceImg?.isConnected)c.sourceImg.click();else c.target.click();},200);
     setTimeout(()=>{if(state.mode==='web')locateHeader();},550);
-    setTimeout(()=>autoCinema(false),1450);
+    for(const wait of [1100,2200,4200,7300])setTimeout(()=>{if(state.mode==='web'&&Date.now()<state.watchUntil)autoCinema(true);},wait);
   }
   function focusElement(){if(state.area==='rail')return rail[state.rail];
     if(state.area==='search')return search;
@@ -424,7 +424,7 @@
   function autoCinema(force){if(state.mode!=='web'||state.cinema)return false;
     const v=playerElement();if(!v)return false;
     const active=v.tagName==='VIDEO'&&!v.paused;
-    if(!force&&!active)return false;
+    if(!force&&!active && !(state.watchUntil>Date.now()))return false;
     return cinema(true);
   }
   let lastRequest=null;
@@ -443,19 +443,22 @@
     if(localMedia(kind,value)==='ok'){state.lastSeek='ok';return 'ok';}
     const frames=Array.from(document.querySelectorAll('iframe')).filter(f=>!shell.contains(f));
     if(!frames.length){state.lastSeek='unsupported';return 'unsupported';}
-    if(lastRequest && !lastRequest.done && Date.now()-lastRequest.at < 1200)return 'pending';
-    if(state.lastSeek==='unsupported' && lastRequest && Date.now()-lastRequest.at<4000)return 'unsupported';
+    if(lastRequest && !lastRequest.done && Date.now()-lastRequest.at < 260)return 'pending';
+    if(state.lastSeek==='unsupported' && lastRequest && Date.now()-lastRequest.at<800)return 'unsupported';
     const id='pftv'+Date.now()+Math.random().toString(36).slice(2);
     lastRequest={id,done:false,at:Date.now()};
-    const payload={__PFTV_MEDIA_COMMAND:'pftv/v3',id,kind,value};
+    const payload={__PFTV_MEDIA_COMMAND:'pftv/v4',id,kind,value};
     for(const f of frames){try{f.contentWindow?.postMessage(payload,'*');}catch(_){}}
     setTimeout(()=>{if(lastRequest?.id===id&&!lastRequest.done){state.lastSeek='unsupported';
-      toast('This source does not allow remote seeking. Try another source.');}},1000);
+      toast('This source does not allow remote seeking. Try another source.');}},1150);
     return 'pending';
   }
   window.addEventListener('message',ev=>{
-    const d=ev.data;if(!d||d.__PFTV_MEDIA_RESULT!=='pftv/v3'||!lastRequest||d.id!==lastRequest.id)return;
-    if(d.ok){lastRequest.done=true;state.lastSeek='ok';toast('Player position updated');}
+    const d=ev.data;if(!d||d.__PFTV_MEDIA_RESULT!=='pftv/v4')return;
+    if(d.method==='sources'&&d.sources){acceptFrameSources(ev.source,d.sources);return;}
+    if(!lastRequest||d.id!==lastRequest.id)return;
+    if(d.ok){lastRequest.done=true;state.lastSeek='ok';
+      toast(d.method==='button-clicks'?'Player buttons: '+d.clicks+' clicks (about '+Math.abs(d.approxSeconds)+' seconds)':'Player position updated');}
   });
   function seek(x){return command('relative',x);}
   function seekPercent(x){return command('percent',x);}
@@ -470,13 +473,63 @@
     toast('Remote keys forwarded to the embedded player');
     return true;
   }
-  function chooseSources(){
-    exitCinema(true);if(state.mode==='tv')enterWebsite();
-    const list=siteCandidates();
-    const el=list.find(n=>/\b(server|source|mirror|backup|change player|select player)\b/i.test(text(n).slice(0,90)));
-    if(!el){toast('No source picker found on this page');return false;}
-    siteFocus=el;el.classList.add('pftv-site-focus');el.scrollIntoView({block:'center'});return true;
+  // Source picker is queried from the live site and injected media frames. Names are
+  // sourced from real controls, never guessed or manufactured.
+  let sourceNodes=[],frameSources=[],frameStream=null;
+  function nameSource(el){return [el.getAttribute('aria-label'),el.getAttribute('title'),text(el)].filter(Boolean).join(' ').replace(/\s+/g,' ').trim().slice(0,90);}
+  function findSourceControls(){
+    const re=/\b(server|source|mirror|backup|stream\s*\d+|player\s*\d+|vidsrc|vidcloud|filemoon|upcloud|streamtape|streamwish)\b/i;
+    const candidates=Array.from(document.querySelectorAll('button,[role=option],[role=tab],[role=button],a[href],li'));
+    return candidates.filter(el=>!shell.contains(el)&&el.isConnected&&!el.disabled&&
+      nameSource(el).length<92&&re.test(nameSource(el))).slice(0,40);
   }
+  function acceptFrameSources(win,list){
+    if(!Array.isArray(list))return;
+    if(!Array.from(document.querySelectorAll('iframe')).some(f=>f.contentWindow===win))return;
+    frameSources=frameSources.filter(s=>s.win!==win);
+    for(const s of list.slice(0,30)){
+      if(typeof s.label==='string'&&s.label.length<100&&Number.isInteger(s.id))
+        frameSources.push({win,index:s.id,label:s.label});
+    }
+  }
+  function requestSources(){
+    sourceNodes=findSourceControls();frameSources=[];
+    const id='sources'+Date.now();
+    for(const f of document.querySelectorAll('iframe')){
+      try{f.contentWindow?.postMessage({__PFTV_MEDIA_COMMAND:'pftv/v4',id,kind:'sources'},'*');}catch(_){}
+    }
+    return true;
+  }
+  function sourceList(){
+    // The native picker asks after the iframe replies have had time to arrive.
+    const found=sourceNodes.filter(el=>el.isConnected).map((el,i)=>({label:nameSource(el),type:'page',id:i}));
+    frameSources.forEach((s,i)=>found.push({label:s.label,type:'frame',id:i}));
+    const seen=new Set();return JSON.stringify(found.filter(s=>{
+      const label=s.label.toLowerCase();if(seen.has(label))return false;seen.add(label);return true;
+    }).slice(0,40));
+  }
+  function selectSource(type,index){
+    const i=Number(index);
+    if(type==='page'){
+      const el=sourceNodes[i];if(!el?.isConnected)return false;
+      el.click();
+    } else if(type==='frame') {
+      const s=frameSources[i];if(!s)return false;
+      try{s.win.postMessage({__PFTV_MEDIA_COMMAND:'pftv/v4',id:'select'+Date.now(),kind:'selectSource',value:s.index},'*');}catch(_){return false;}
+    } else return false;
+    state.watchUntil=Date.now()+15000;userExitedCinema=false;
+    setTimeout(()=>{if(state.mode==='web')autoCinema(true);},900);
+    return true;
+  }
+  function chooseSources(){return requestSources();}
+  function resumeWebMedia(){
+    for(const v of document.querySelectorAll('video'))try{v.play().catch(()=>{});}catch(_){}
+    for(const f of document.querySelectorAll('iframe'))try{f.contentWindow?.postMessage({__PFTV_MEDIA_COMMAND:'pftv/v4',id:'play'+Date.now(),kind:'play'},'*');}catch(_){}
+  }
+  function suspendWebMedia(){for(const v of document.querySelectorAll('video'))try{v.pause();}catch(_){}
+    for(const f of document.querySelectorAll('iframe'))try{f.contentWindow?.postMessage({__PFTV_MEDIA_COMMAND:'pftv/v4',id:'pause'+Date.now(),kind:'pause'},'*');}catch(_){}
+  }
+
   function zoom(percent){state.zoom=Math.max(40,Math.min(160,Number(percent)||85));
     if(state.mode==='web'&&!state.cinema)document.documentElement.style.zoom=(state.zoom/100).toFixed(2);
     else document.documentElement.style.zoom='1';return state.zoom;}
@@ -525,15 +578,26 @@
     for(const a of document.querySelectorAll('a[href],source[src]')){
       if(!shell.contains(a))sources.push(a.href||a.src);
     }
+    if(frameStream && Date.now()-frameStream.time<20000){
+      return JSON.stringify({url:frameStream.url,referer:frameStream.origin});
+    }
     const url=sources.find(u=>{
       try{return u && /^https?:$/i.test(new URL(u,location.href).protocol)&&supported.test(u);}catch(_){return false;}
     });
     return url?JSON.stringify({url:new URL(url,location.href).href,referer:location.href}):'';
   }
+  window.addEventListener('message',ev=>{
+    const d=ev.data;
+    if(d?.__PFTV_MEDIA_EVENT!=='pftv/v4'||d.event!=='stream')return;
+    if(!Array.from(document.querySelectorAll('iframe')).some(f=>f.contentWindow===ev.source))return;
+    if(typeof d.url!=='string'||d.url.length>4096)return;
+    try{const u=new URL(d.url);if(!/^https?:$/.test(u.protocol)||!/\.(m3u8|mpd|mp4|m4v|webm|mkv)(?:$|[?#])/i.test(u.href))return;
+      frameStream={url:u.href,origin:ev.origin,time:Date.now()};}catch(_){}
+  });
   function nativePip(on){state.nativePip=!!on;const foot=shell.querySelector('#pftv-rail-footer');if(foot)foot.textContent=on?'◀ from sidebar: Mini-player\nOK: play/pause or expand':'D-pad to move · OK to open\nMenu for settings and player';return true;}
-  window.PFTV={version:5,key(k){if(k==='OK')return activate();return navigate(k);},activate,
+  window.PFTV={version:7,key(k){if(k==='OK')return activate();return navigate(k);},activate,
     back,enterTV,enterWebsite,isTvMode:()=>state.mode==='tv',isCinema:()=>!!state.cinema,
-    hasPlayer,cinema,exitCinema,zoom,setZoom:zoom,seek,seekPercent,seekTo,togglePlayback,chooseSources,focusPlayer,
+    hasPlayer,cinema,exitCinema,zoom,setZoom:zoom,seek,seekPercent,seekTo,togglePlayback,chooseSources,requestSources,sourceList,selectSource,suspendWebMedia,resumeWebMedia,focusPlayer,
     isEditing:()=>false,search:searchSite,directStream,nativePip,toast};
   zoom(window.__PFTV_ZOOM||85);refresh(true);renderFocus();setTimeout(gatherMore,900);
 })();
