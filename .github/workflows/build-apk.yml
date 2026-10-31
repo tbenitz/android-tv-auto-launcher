@@ -1,36 +1,47 @@
-name: Build PirateFlix TV APK
+name: Build Android APK
 
 on:
   push:
-    branches: [pirateflix-tv-wrapper]
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Verify Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          test -f "$ANDROID_HOME/platforms/android-35/android.jar" || sdkmanager "platforms;android-35"
-      - name: Build installable debug APK
+      - name: Build installable APK
         run: gradle --no-daemon --stacktrace assembleDebug
-      - name: Prepare downloaded APK
+      - name: Name APK for TV installation
         run: cp app/build/outputs/apk/debug/app-debug.apk PirateFlix-TV.apk
-      - name: Upload Android APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PirateFlix-TV-APK
           path: PirateFlix-TV.apk
           if-no-files-found: error
+
+      - name: Publish tag release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PirateFlix-TV.apk
+          generate_release_notes: true
+          name: PirateFlix TV ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

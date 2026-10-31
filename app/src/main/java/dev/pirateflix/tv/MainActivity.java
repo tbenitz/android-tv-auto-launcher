@@ -32,6 +32,11 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.EditText;
+import android.text.InputType;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import java.util.Collections;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -58,6 +63,7 @@ public final class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback customVideoCallback;
     private android.webkit.ValueCallback<Uri[]> fileCallback;
     private String navigationScript;
+    private String mediaFrameScript;
     private boolean clearHistoryOnHome;
     private boolean backHeld;
     private boolean backMenuShown;
@@ -100,6 +106,7 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         navigationScript = loadAsset("tv-nav.js");
+        mediaFrameScript = loadAsset("iframe-media.js");
         applyImmersiveMode();
         buildLayout();
         createWebView();
@@ -209,6 +216,17 @@ public final class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(browser, true);
+
+        // Inject lightweight media controls into iframe documents as they load.
+        // This allows seeking within many cross-origin HTML5 players while
+        // respecting each iframe's own source/DRM constraints.
+        if (!mediaFrameScript.isEmpty() && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            try {
+                WebViewCompat.addDocumentStartJavaScript(browser, mediaFrameScript, Collections.singleton("*"));
+            } catch (IllegalArgumentException | UnsupportedOperationException ignored) {
+                // Older Android System WebView: main-page video controls still work.
+            }
+        }
 
         browser.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -395,12 +413,63 @@ public final class MainActivity extends Activity {
         if (webView == null) return;
         String n = String.format(Locale.US, "%.2f", seconds);
         webView.evaluateJavascript("window.PFTV&&window.PFTV.seek("+n+")", value -> {
-            if ("true".equals(value)) {
-                showStatus((seconds>=0?"+":"") + Math.round(seconds) + " sec  •  hold for faster seek");
+            if ("\"direct\"".equals(value)) {
+                if (first) showStatus((seconds>=0?"+":"") + Math.round(seconds) + "s • hold to accelerate");
+            } else if ("\"queued\"".equals(value)) {
+                if (first) showStatus("Seeking embedded video • hold for faster skips");
             } else if (first) {
-                showStatus("Embedded player: seek with its own controls");
+                showStatus("Use Player menu → Jump to time / video controls");
             }
         });
+    }
+
+    private void seekPercent(int percent) {
+        if (webView == null) return;
+        evaluateTv("window.PFTV&&window.PFTV.seekPercent("+percent+")");
+        showStatus("Jump to " + percent + "% of video");
+    }
+
+    private void jumpToTimeDialog() {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText("01:00:00");
+        input.setSelectAllOnFocus(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setHint("hh:mm:ss or mm:ss");
+        int pad=dp(24);
+        LinearLayout wrapper=new LinearLayout(this);
+        wrapper.setPadding(pad,dp(8),pad,0);
+        wrapper.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        new AlertDialog.Builder(this).setTitle("Jump to video time")
+                .setMessage("Example: 01:15:30 goes to 1 hour, 15 minutes and 30 seconds.")
+                .setView(wrapper)
+                .setPositiveButton("Jump", (d,w)->{
+                    try {
+                        String[] fields=input.getText().toString().trim().split(":");
+                        if(fields.length<1||fields.length>3)throw new NumberFormatException();
+                        int seconds=0;
+                        for(String f:fields) {
+                            int value=Integer.parseInt(f.trim());
+                            if(value<0)throw new NumberFormatException();
+                            seconds=Math.addExact(Math.multiplyExact(seconds,60),value);
+                        }
+                        if(seconds>86400)throw new NumberFormatException();
+                        evaluateTv("window.PFTV&&window.PFTV.seekTo("+seconds+")");
+                        showStatus("Jump to "+input.getText().toString());
+                    } catch (NumberFormatException | ArithmeticException ex) {
+                        showStatus("Invalid time • use hh:mm:ss");
+                    }
+                }).setNegativeButton("Cancel",null).show();
+    }
+
+    private void showSeekMenu() {
+        final int[] percents={10,25,50,75,90};
+        final String[] choices={"Jump to 10%", "Jump to 25%", "Jump to 50% (halfway)",
+            "Jump to 75%", "Jump to 90%", "Enter exact time..."};
+        new AlertDialog.Builder(this).setTitle("Seek video • choose position")
+                .setItems(choices,(d,i)->{
+                    if(i==5)jumpToTimeDialog(); else seekPercent(percents[i]);
+                }).setNegativeButton("Cancel",null).show();
     }
 
     private void beginSeek(int dir) {
@@ -415,24 +484,29 @@ public final class MainActivity extends Activity {
     private void handleArrow(int key) {
         if (keyboardRequested && (key == KeyEvent.KEYCODE_DPAD_DOWN || key == KeyEvent.KEYCODE_DPAD_UP)) {
             hideKeyboard();
-            sendNav(key==KeyEvent.KEYCODE_DPAD_DOWN?"DOWN":"UP");
+            sendNav(key == KeyEvent.KEYCODE_DPAD_DOWN ? "DOWN" : "UP");
             return;
         }
         if (keyboardRequested) return;
         if (customVideoView != null) {
             if (key == KeyEvent.KEYCODE_DPAD_LEFT) beginSeek(-1);
             else if (key == KeyEvent.KEYCODE_DPAD_RIGHT) beginSeek(1);
-            else showStatus("Hold OK for player/source options");
+            else showStatus("Hold OK: player options / jump to time");
             return;
         }
         if (webView == null) return;
-        final String arrow = key==KeyEvent.KEYCODE_DPAD_UP?"UP":key==KeyEvent.KEYCODE_DPAD_DOWN?"DOWN":
-                key==KeyEvent.KEYCODE_DPAD_LEFT?"LEFT":"RIGHT";
-        webView.evaluateJavascript("window.PFTV&&window.PFTV.isCinema()", value -> {
-            if ("true".equals(value) && (key==KeyEvent.KEYCODE_DPAD_LEFT || key==KeyEvent.KEYCODE_DPAD_RIGHT)) {
-                int dir=key==KeyEvent.KEYCODE_DPAD_RIGHT?1:-1;
-                if (dir>0 ? rightHeld : leftHeld) beginSeek(dir);
-                else seekVideo(dir*15.0, true);
+        final String arrow = key == KeyEvent.KEYCODE_DPAD_UP ? "UP" :
+                key == KeyEvent.KEYCODE_DPAD_DOWN ? "DOWN" :
+                key == KeyEvent.KEYCODE_DPAD_LEFT ? "LEFT" : "RIGHT";
+        if (key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN) {
+            sendNav(arrow);
+            return;
+        }
+        final int dir = key == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
+        webView.evaluateJavascript("window.PFTV&&window.PFTV.hasPlayer()", value -> {
+            if ("true".equals(value)) {
+                if (dir > 0 ? rightHeld : leftHeld) beginSeek(dir);
+                else seekVideo(dir * 15.0, true); // A quick tap always skips once.
             } else sendNav(arrow);
         });
     }
@@ -462,6 +536,9 @@ public final class MainActivity extends Activity {
             if (down && event.getRepeatCount()==0) {
                 if (code==KeyEvent.KEYCODE_DPAD_LEFT) leftHeld=true;
                 if (code==KeyEvent.KEYCODE_DPAD_RIGHT) rightHeld=true;
+                handleArrow(code);
+            } else if (down && event.getRepeatCount() >= 3 && event.getRepeatCount()%3 == 0 &&
+                    (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN)) {
                 handleArrow(code);
             } else if (up && (code==KeyEvent.KEYCODE_DPAD_LEFT || code==KeyEvent.KEYCODE_DPAD_RIGHT)) {
                 if (code==KeyEvent.KEYCODE_DPAD_LEFT) leftHeld=false;
@@ -540,7 +617,7 @@ public final class MainActivity extends Activity {
         stopSeek();
         final String[] options = {
                 "Go to PirateFlix Home", "Back one page", "Change video source (site picker)",
-                "Fullscreen current video", "Play / Pause", "Page size / zoom", "Reload page", "Exit app"
+                "Fullscreen current video", "Play / Pause", "Jump to time / percentage", "Page size / zoom", "Reload page", "Exit app"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("PirateFlix TV • Remote controls")
@@ -553,9 +630,10 @@ public final class MainActivity extends Activity {
                     }
                     if (choice == 3) evaluateTv("window.PFTV&&window.PFTV.cinema(true)");
                     if (choice == 4) evaluateTv("window.PFTV&&window.PFTV.togglePlayback()");
-                    if (choice == 5) showZoomMenu();
-                    if (choice == 6 && webView != null) { errorPanel.setVisibility(View.GONE); webView.reload(); }
-                    if (choice == 7) finish();
+                    if (choice == 5) showSeekMenu();
+                    if (choice == 6) showZoomMenu();
+                    if (choice == 7 && webView != null) { errorPanel.setVisibility(View.GONE); webView.reload(); }
+                    if (choice == 8) finish();
                 })
                 .setNegativeButton("Cancel", null).create();
         dialog.setOnDismissListener(d -> applyImmersiveMode());
