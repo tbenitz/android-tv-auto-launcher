@@ -51,7 +51,7 @@ public final class MainActivity extends Activity {
     private static final String PREF_ZOOM = "page_zoom";
     private static final long URL_CHECK_MS = 1250L;
     private static final int PICK_FILE = 501;
-    private static final int SEEK_TICK_MS = 250;
+    private static final int SEEK_TICK_MS = 400;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private FrameLayout root;
@@ -89,8 +89,8 @@ public final class MainActivity extends Activity {
             if (seekDirection == 0 || webView == null) return;
             long hold = android.os.SystemClock.uptimeMillis() - seekStartMs;
             // Rate while holding: 15, 30, 60, 120, eventually 240 seconds per second.
-            double rate = hold > 5000 ? 240 : hold > 3500 ? 120 : hold > 2300 ? 60
-                    : hold > 1200 ? 30 : 15;
+            double rate = hold > 4800 ? 240 : hold > 3300 ? 120 : hold > 2100 ? 60
+                    : hold > 1000 ? 30 : 15;
             seekVideo(seekDirection * rate * (SEEK_TICK_MS / 1000.0), false);
             handler.postDelayed(this, SEEK_TICK_MS);
         }
@@ -366,7 +366,7 @@ public final class MainActivity extends Activity {
 
     private void installTvNavigation() {
         if (webView == null || !isSiteUrl(webView.getUrl()) || navigationScript.isEmpty()) return;
-        int zoom = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(PREF_ZOOM, 115);
+        int zoom = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(PREF_ZOOM, 85);
         webView.evaluateJavascript("window.__PFTV_ZOOM=" + zoom + ";" + navigationScript, null);
     }
 
@@ -413,20 +413,22 @@ public final class MainActivity extends Activity {
         if (webView == null) return;
         String n = String.format(Locale.US, "%.2f", seconds);
         webView.evaluateJavascript("window.PFTV&&window.PFTV.seek("+n+")", value -> {
-            if ("\"direct\"".equals(value)) {
-                if (first) showStatus((seconds>=0?"+":"") + Math.round(seconds) + "s • hold to accelerate");
-            } else if ("\"queued\"".equals(value)) {
-                if (first) showStatus("Seeking embedded video • hold for faster skips");
+            if ("\"ok\"".equals(value)) {
+                if (first) showStatus((seconds >= 0 ? "+" : "") + Math.round(seconds) + "s • hold to accelerate");
+            } else if ("\"pending\"".equals(value)) {
+                if (first) showStatus("Checking embedded player seek support...");
             } else if (first) {
-                showStatus("Use Player menu → Jump to time / video controls");
-            }
+                showStatus("This player does not support TV remote seeking. Try a different source.");
+            } else stopSeek();
         });
     }
 
     private void seekPercent(int percent) {
         if (webView == null) return;
-        evaluateTv("window.PFTV&&window.PFTV.seekPercent("+percent+")");
-        showStatus("Jump to " + percent + "% of video");
+        webView.evaluateJavascript("window.PFTV&&window.PFTV.seekPercent("+percent+")", result -> {
+            if ("\"unsupported\"".equals(result) || "\"no-player\"".equals(result))
+                showStatus("Seek unsupported on this source");
+        });
     }
 
     private void jumpToTimeDialog() {
@@ -454,8 +456,10 @@ public final class MainActivity extends Activity {
                             seconds=Math.addExact(Math.multiplyExact(seconds,60),value);
                         }
                         if(seconds>86400)throw new NumberFormatException();
-                        evaluateTv("window.PFTV&&window.PFTV.seekTo("+seconds+")");
-                        showStatus("Jump to "+input.getText().toString());
+                        if (webView != null) webView.evaluateJavascript("window.PFTV&&window.PFTV.seekTo("+seconds+")", result -> {
+                            if ("\"unsupported\"".equals(result) || "\"no-player\"".equals(result))
+                                showStatus("This source does not allow seeking to a time");
+                        });
                     } catch (NumberFormatException | ArithmeticException ex) {
                         showStatus("Invalid time • use hh:mm:ss");
                     }
@@ -472,14 +476,18 @@ public final class MainActivity extends Activity {
                 }).setNegativeButton("Cancel",null).show();
     }
 
+    // A click seeks once; holding accelerates smoothly without using remote repeat-count quirks.
     private void beginSeek(int dir) {
         stopSeek();
         seekDirection = dir;
         seekStartMs = android.os.SystemClock.uptimeMillis();
         seekVideo(dir * 15.0, true);
-        handler.postDelayed(seekTask, 650L);
+        handler.postDelayed(seekTask, 850L);
     }
-    private void stopSeek() { seekDirection = 0; handler.removeCallbacks(seekTask); }
+    private void stopSeek() {
+        seekDirection = 0;
+        handler.removeCallbacks(seekTask);
+    }
 
     private void handleArrow(int key) {
         if (keyboardRequested && (key == KeyEvent.KEYCODE_DPAD_DOWN || key == KeyEvent.KEYCODE_DPAD_UP)) {
@@ -487,27 +495,25 @@ public final class MainActivity extends Activity {
             sendNav(key == KeyEvent.KEYCODE_DPAD_DOWN ? "DOWN" : "UP");
             return;
         }
-        if (keyboardRequested) return;
-        if (customVideoView != null) {
-            if (key == KeyEvent.KEYCODE_DPAD_LEFT) beginSeek(-1);
-            else if (key == KeyEvent.KEYCODE_DPAD_RIGHT) beginSeek(1);
-            else showStatus("Hold OK: player options / jump to time");
-            return;
-        }
-        if (webView == null) return;
+        if (keyboardRequested || webView == null) return;
         final String arrow = key == KeyEvent.KEYCODE_DPAD_UP ? "UP" :
                 key == KeyEvent.KEYCODE_DPAD_DOWN ? "DOWN" :
                 key == KeyEvent.KEYCODE_DPAD_LEFT ? "LEFT" : "RIGHT";
         if (key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN) {
-            sendNav(arrow);
-            return;
+            if (customVideoView != null) {
+                if (key == KeyEvent.KEYCODE_DPAD_UP) showSeekMenu();
+                return;
+            }
+            sendNav(arrow); return;
         }
         final int dir = key == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
+        if (customVideoView != null) { beginSeek(dir); return; }
         webView.evaluateJavascript("window.PFTV&&window.PFTV.hasPlayer()", value -> {
-            if ("true".equals(value)) {
-                if (dir > 0 ? rightHeld : leftHeld) beginSeek(dir);
-                else seekVideo(dir * 15.0, true); // A quick tap always skips once.
-            } else sendNav(arrow);
+            if ((dir > 0 ? rightHeld : leftHeld) && "true".equals(value)) {
+                beginSeek(dir);
+            } else if ((dir > 0 ? rightHeld : leftHeld)) {
+                sendNav(arrow);
+            }
         });
     }
 
@@ -537,7 +543,7 @@ public final class MainActivity extends Activity {
                 if (code==KeyEvent.KEYCODE_DPAD_LEFT) leftHeld=true;
                 if (code==KeyEvent.KEYCODE_DPAD_RIGHT) rightHeld=true;
                 handleArrow(code);
-            } else if (down && event.getRepeatCount() >= 3 && event.getRepeatCount()%3 == 0 &&
+            } else if (down && event.getRepeatCount() >= 4 && event.getRepeatCount()%4 == 0 &&
                     (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN)) {
                 handleArrow(code);
             } else if (up && (code==KeyEvent.KEYCODE_DPAD_LEFT || code==KeyEvent.KEYCODE_DPAD_RIGHT)) {
@@ -616,24 +622,31 @@ public final class MainActivity extends Activity {
     private void showNavigationMenu() {
         stopSeek();
         final String[] options = {
-                "Go to PirateFlix Home", "Back one page", "Change video source (site picker)",
-                "Fullscreen current video", "Play / Pause", "Jump to time / percentage", "Page size / zoom", "Reload page", "Exit app"
+                "TV grid / Browse", "Website view (sources, episodes & details)",
+                "Go to PirateFlix Home", "Previous web page", "Play / Pause",
+                "Seek / Jump to position", "Change video source", "Fullscreen current player",
+                "Page zoom 40%–160%", "Reload website", "Exit app"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("PirateFlix TV • Remote controls")
+                .setTitle("PirateFlix TV • Controls")
                 .setItems(options, (d, choice) -> {
-                    if (choice == 0) goHome();
-                    if (choice == 1) handleShortBack();
-                    if (choice == 2) {
+                    if (choice == 0) {
                         if (customVideoView != null) exitFullScreenVideo();
-                        evaluateTv("window.PFTV&&window.PFTV.findSources()");
+                        evaluateTv("window.PFTV&&window.PFTV.enterTV()");
                     }
-                    if (choice == 3) evaluateTv("window.PFTV&&window.PFTV.cinema(true)");
+                    if (choice == 1) evaluateTv("window.PFTV&&window.PFTV.enterWebsite()");
+                    if (choice == 2) goHome();
+                    if (choice == 3 && webView != null && webView.canGoBack()) webView.goBack();
                     if (choice == 4) evaluateTv("window.PFTV&&window.PFTV.togglePlayback()");
                     if (choice == 5) showSeekMenu();
-                    if (choice == 6) showZoomMenu();
-                    if (choice == 7 && webView != null) { errorPanel.setVisibility(View.GONE); webView.reload(); }
-                    if (choice == 8) finish();
+                    if (choice == 6) {
+                        if (customVideoView != null) exitFullScreenVideo();
+                        evaluateTv("window.PFTV&&window.PFTV.chooseSources()");
+                    }
+                    if (choice == 7) evaluateTv("window.PFTV&&window.PFTV.cinema(true)");
+                    if (choice == 8) showZoomMenu();
+                    if (choice == 9 && webView != null) { errorPanel.setVisibility(View.GONE); webView.reload(); }
+                    if (choice == 10) finish();
                 })
                 .setNegativeButton("Cancel", null).create();
         dialog.setOnDismissListener(d -> applyImmersiveMode());
@@ -641,17 +654,17 @@ public final class MainActivity extends Activity {
     }
 
     private void showZoomMenu() {
-        final int[] values = {90, 100, 115, 125, 140};
-        final String[] labels = {"90% (smaller)", "100% (standard)", "115% (default, larger)",
-                "125% (larger)", "140% (extra large)"};
-        int saved = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(PREF_ZOOM, 115);
-        int checked = 2;
+        final int[] values = {40, 50, 60, 70, 80, 85, 90, 100, 115, 125, 140, 160};
+        final String[] labels = {"40% (very small)", "50%", "60%", "70%", "80%", "85% (default)",
+                "90%", "100% (original)", "115%", "125%", "140%", "160% (large)"};
+        int saved = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(PREF_ZOOM, 85);
+        int checked = 5;
         for (int i=0;i<values.length;i++) if (saved==values[i]) checked=i;
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Page display size")
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Website zoom (TV grid retains readable cards)")
                 .setSingleChoiceItems(labels, checked, (d, i) -> {
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(PREF_ZOOM,values[i]).apply();
-                    evaluateTv("window.PFTV&&window.PFTV.setZoom("+values[i]+")");
-                    showStatus("Page size: " + values[i] + "%");
+                    evaluateTv("window.PFTV&&window.PFTV.zoom("+values[i]+")");
+                    showStatus("Website zoom: " + values[i] + "%");
                     d.dismiss();
                 }).setNegativeButton("Cancel", null).create();
         dialog.setOnDismissListener(d -> applyImmersiveMode());

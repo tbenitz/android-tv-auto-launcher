@@ -1,50 +1,38 @@
-# PirateFlix TV — Android TV full-screen wrapper (v1.2)
+# PirateFlix TV 2.0 — Android TV browsing shell
 
-TV-first app that opens https://pirate-flix.pages.dev/ in Android WebView. This is a wrapper, not an independent movie/TV streaming service. Content and source URLs belong to the site.
+A TV-first wrapper for **https://pirate-flix.pages.dev/**. The catalog is read from the live website (no fake titles/channels), so the APK can display the site's real movie/channel cards in a dedicated TV grid. The underlying website remains responsible for content listings, playback and source/episode selection.
 
-## v1.2 fixes
+## New experience
 
-* **Live TV cards are selectable:** parent channel tiles remain available even when they contain a nested Favorite icon. OK opens the selected card, not the favorite button. D-pad holding repeats navigation for long channel grids.
-* **Actual cinema isolation:** when an HTML5 player or supported embedded video is launched, other page sections (including header, tabs, search box, and sidebar) are hidden, not overlaid across the player. Back restores the original page. A manual exit no longer automatically re-enters cinema while the video keeps playing.
-* **Video seek controls:** Left/Right taps attempt ±15 seconds. Hold to accelerate to 30, 60, 120, then 240 seconds/second. For a long movie, **Hold OK → Jump to time / percentage** allows 10%, 25%, 50%, 75%, 90%, or `hh:mm:ss` (for example `01:15:30`). Seek is clamped to the media's duration.
-* **Iframe seek support:** uses AndroidX WebKit's optional document-start injection to put a minimal media-control listener in HTML5 iframe players, including supported cross-origin frames, without reading or changing stream URLs. Older System WebViews that lack the injection feature fall back to native/top-page video controls.
-* **Source selection:** Hold OK → Change video source exits cinema, highlights the website's actual server/source picker if present. No fake sources, DRM bypass, video extraction, or transcoding.
-* **Search input:** D-pad selection does not focus Search; press OK to open the keyboard. Up/Down exits the keyboard to browse results.
-* **Zoom:** default 115%, configurable from 90% to 140% in the app menu, remembered between launches.
-* **Ads:** lightweight known-ad-host blocking and popup suppression remain in place without disrupting ordinary media providers where possible.
+- **TV grid:** separate fullscreen, scrolling poster/channel grid with a left-hand Movies / TV Shows / Live TV / Watch Later / Website view rail. The webpage's desktop header is no longer drawn over the grid. The TV shell rebuilds when the site updates its titles.
+- **D-pad / Enter:** move selection in the grid and press OK to open a real website card. Navigation avoids Favorite buttons nested inside Live TV channel cards. Search opens the software keyboard only when OK is pressed on the Search field.
+- **Website/detail view:** opens after selecting a TV card, hiding the site's large top header; select episodes and sources using real page controls. Press Back to return to the TV grid.
+- **Fullscreen:** compatible video / embedded player elements can be isolated from the site header and expanded across the screen. The player is not replaced with an unrelated source.
+- **Zoom:** menu → Page zoom from 40%, 50%, 60%, 70%, 80%, 85%, 90%, 100%, 115%, 125%, 140%, or 160%. This controls the underlying website; the TV grid keeps a readable layout.
+- **Playback controls where supported:** Left/Right skips 15 s, held Left/Right accelerates up to 240 seconds per second; playback can be jumped to 10/25/50/75/90% or an exact time using Menu. A frame bridge attempts seeking in compatible embedded HTML5 players.
+- **Clear failure behavior:** cross-origin hosts that don't expose controllable HTML5 video cannot be forced to seek by a WebView. The app reports unsupported seeking rather than claiming success. Use the actual site's source selection or a different compatible source.
+- **Ad domain blocking:** conservative known-ad-host list; avoids intercepting normal media sources. No privileged VPN or DRM bypass.
+- **Remembers the last website page** as a URL.
 
 ## Remote controls
 
-| Remote | Website browsing | Movie/video playing |
-| --- | --- | --- |
-| D-pad Up/Down | Select cards, tabs and buttons; scroll longer lists | Show controls hint |
-| D-pad Left/Right | Move selection horizontally | Tap: ±15 seconds; hold: faster seek |
-| OK / Enter | Open selected channel/card; on Search opens keyboard | Pause/Play if HTML5 player is accessible |
-| Hold OK (~0.65s), MENU, or INFO | Options including Home and page size | Video options including **Jump to time / percentage**, Change source |
-| Back | Previous web page | Exit cinema back to page, or step back |
-| Hold Back (~0.65s) | App control menu | App control menu |
+| Button | TV grid | Website / player |
+|---|---|---|
+| D-pad | Move rail/grid selection | Move site focus; Left/Right seeks when a player is detected |
+| OK | Open selected category, card or search field | Select focused button or play/pause in cinema mode |
+| Back | Exit / browser menu | Return to TV grid or exit cinema first |
+| Hold OK, Hold Back, Menu, Info | App control menu | App control menu |
+| Menu → TV grid | TV browsing layout | Return to TV browsing layout |
+| Menu → Website view | Original website controls without top banner | Browse sources, filters, episodes |
+| Menu → Fullscreen current player | — | Attempts fullscreen video isolation |
+| Menu → Change video source | — | Highlight an actual website source control when available |
 
-**Video limitation:** Some external players use DRM, proprietary runtimes, canvas rendering, cross-origin restrictions, or custom protections, so controlling their timeline from a WebView wrapper is not guaranteed. For a player that cannot be sought directly, its own timeline may still be required. Live TV streams without a seekable timeline cannot jump halfway through a movie.
+## Build
 
-## Build on GitHub
+The source is published to [the `pirateflix-tv-wrapper` branch](https://github.com/tbenitz/android-tv-auto-launcher/tree/pirateflix-tv-wrapper). GitHub Actions creates a debug signed `PirateFlix-TV.apk` artifact. Android TV 6+ (API 23+) / Mi Box compatible, dependent on Android System WebView.
 
-The code is on the [`pirateflix-tv-wrapper` branch](https://github.com/tbenitz/android-tv-auto-launcher/tree/pirateflix-tv-wrapper). The original `main` branch is not modified.
+Note: GitHub Actions debug builds may use different signing keys. If an update fails to install over an older version, uninstall the old package first; doing so clears its local website data.
 
-1. Open the [GitHub Actions builds](https://github.com/tbenitz/android-tv-auto-launcher/actions/workflows/build-apk.yml).
-2. Select the `pirateflix-tv-wrapper` branch and open the latest successful run.
-3. Under **Artifacts**, download the `PirateFlix-TV-APK` archive; extract `PirateFlix-TV.apk`.
-4. Sideload that APK on the Android TV box.
+## Technical limitations
 
-Build requirements: Java 17, Android SDK 35, Gradle 8.10.2; installs on Android 6.0+ (API 23) if the dependencies permit, including Android TV / Mi Box. A debug APK may not install over an earlier debug APK signed by a different key; uninstalling the old app removes its browser storage and saved URL. To preserve data on subsequent upgrades, use a stable signing key.
-
-## Implementation
-
-* `app/src/main/java/dev/pirateflix/tv/MainActivity.java` — native WebView, D-pad, menu, zoom, media bridge, cookies, last URL, advertising host filter.
-* `app/src/main/assets/tv-nav.js` — card-aware TV navigation, cinema isolation, source selection, seeking and time-jump UI commands.
-* `app/src/main/assets/iframe-media.js` — tiny start-of-document iframe message listener for supported HTML5 video elements.
-
-The site and its third-party resources must be used lawfully. The APK does not provide media, host video, circumvent DRM, or guarantee an external player will support seeking.
-
-## Testing
-
-JavaScript syntax is checked in CI. Build success does not guarantee playback support on every third-party video host; actual TV navigation and embedded seeks must be tested on device.
+This APK does not control the website's unpublished source code. It creates a TV layout from the current site's DOM, so significant changes to the website's markup could require an update. It cannot guarantee playback or seek in a proprietary or DRM-protected third-party iframe. Direct/native stream playback would require an explicit supported media URL from the website or authorized streaming source and a separate player integration.
