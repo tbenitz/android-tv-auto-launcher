@@ -23,7 +23,7 @@ grep -q "Settings" /tmp/window.xml || { echo "Settings navigation missing"; exit
 
 
 # Verify the actual app-picker route, not just the initial Home layout.
-adb shell input tap 1320 82
+adb shell input tap 1540 90
 sleep 3
 adb shell uiautomator dump /sdcard/apps.xml >/dev/null
 adb shell cat /sdcard/apps.xml > /tmp/apps.xml
