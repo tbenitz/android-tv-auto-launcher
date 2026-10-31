@@ -44,3 +44,7 @@ Build requirements: Java 17, Android SDK 35, Gradle 8.10.2; installs on Android 
 * `app/src/main/assets/iframe-media.js` — tiny start-of-document iframe message listener for supported HTML5 video elements.
 
 The site and its third-party resources must be used lawfully. The APK does not provide media, host video, circumvent DRM, or guarantee an external player will support seeking.
+
+## Testing
+
+JavaScript syntax is checked in CI. Build success does not guarantee playback support on every third-party video host; actual TV navigation and embedded seeks must be tested on device.
