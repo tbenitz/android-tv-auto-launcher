@@ -214,14 +214,14 @@ public final class MainActivity extends Activity {
         statusText = null;
         handler.removeCallbacks(clockUpdater);
         LinearLayout root = column();
-        root.setPadding(dp(30), dp(18), dp(30), dp(18));
+        root.setPadding(dp(26), dp(12), dp(26), dp(12));
         root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{backgroundColor(), isDark() ? 0xff171d27 : 0xff10324a, backgroundColor()}));
         setContentView(root);
 
         LinearLayout header = row();
         header.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(header, new LinearLayout.LayoutParams(-1, dp(60)));
+        root.addView(header, new LinearLayout.LayoutParams(-1, dp(55)));
         LinearLayout wordmark = column();
         wordmark.addView(text("ORBIT  •  TV LAUNCHER", 11, CYAN, true));
         wordmark.addView(text(selected == HOME ? "Home" : selected == APPS ? "All apps" : "Settings",
@@ -255,13 +255,13 @@ public final class MainActivity extends Activity {
         hero.setGravity(Gravity.CENTER_VERTICAL);
         hero.setPadding(dp(16), dp(12), dp(14), dp(12));
         hero.setBackground(panel(surfaceColor(), 16, 0xff3e6b83));
-        root.addView(hero, margins(-1, 112, 0, 16, 0, 10));
+        root.addView(hero, margins(-1, 94, 0, 8, 0, 6));
         String selected = prefs.getString("chosen_package", "");
         Entry target = allApps.get(selected);
         ImageView icon = new ImageView(this);
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         icon.setImageDrawable(target != null ? target.icon : getDrawable(android.R.drawable.sym_def_app_icon));
-        hero.addView(icon, margins(58, 58, 0, 0, 17, 0));
+        hero.addView(icon, margins(49, 49, 0, 0, 15, 0));
         LinearLayout caption = column();
         caption.addView(text("YOUR STARTUP APP", 11, CYAN, true));
         caption.addView(text(selected.isEmpty() ? "Choose a startup app"
@@ -279,7 +279,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout heading = row();
         heading.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(heading, margins(-1, 49, 0, 0, 0, 3));
+        root.addView(heading, margins(-1, 43, 0, 0, 0, 3));
         heading.addView(text("Your favorites", 23, WHITE, true));
         heading.addView(text("    OK to open  •  Hold OK or MENU for options", 12, MUTED, false));
         heading.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
@@ -294,7 +294,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout tools = row();
         tools.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(tools, margins(-1, 53, 0, 8, 0, 0));
+        root.addView(tools, margins(-1, 47, 0, 5, 0, 0));
         tools.addView(button("↓  APK Center", this::openApkCenter, false),
                 margins(-2, 45, 0, 0, 10, 0));
         tools.addView(button("▦  All apps", () -> showPage(APPS), false),
@@ -353,7 +353,7 @@ public final class MainActivity extends Activity {
     private void createGrid(FrameLayout frame, int defaultColumns, boolean favoritesOnly) {
         grid = new GridView(this);
         grid.setNumColumns(prefs.getInt("grid_columns", defaultColumns));
-        grid.setVerticalSpacing(dp(12));
+        grid.setVerticalSpacing(dp(8));
         grid.setHorizontalSpacing(dp(12));
         grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
         grid.setPadding(dp(4), dp(4), dp(4), dp(8));
@@ -855,14 +855,14 @@ public final class MainActivity extends Activity {
             Entry e = displayed.get(position);
             LinearLayout tile = column();
             tile.setGravity(Gravity.CENTER);
-            tile.setPadding(dp(9), dp(8), dp(9), dp(8));
+            tile.setPadding(dp(6), dp(6), dp(6), dp(6));
             tile.setBackground(panel(surfaceColor(), 15, 0xff45647b));
             ImageView icon = new ImageView(MainActivity.this);
             icon.setImageDrawable(e.icon != null ? e.icon
                     : getDrawable(android.R.drawable.sym_def_app_icon));
             icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            tile.addView(icon, margins(62, 62, 0, 0, 0, 8));
-            TextView label = text(e.label, 15, WHITE, true);
+            tile.addView(icon, margins(49, 49, 0, 0, 0, 6));
+            TextView label = text(e.label, 14, WHITE, true);
             label.setGravity(Gravity.CENTER);
             label.setSingleLine(true);
             label.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -872,7 +872,7 @@ public final class MainActivity extends Activity {
                     10, startup ? GOLD : MUTED, true);
             note.setGravity(Gravity.CENTER);
             tile.addView(note);
-            tile.setLayoutParams(new AbsListView.LayoutParams(-1, dp(139)));
+            tile.setLayoutParams(new AbsListView.LayoutParams(-1, dp(108)));
             return tile;
         }
     }
