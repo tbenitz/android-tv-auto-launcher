@@ -29,7 +29,7 @@ import xml.etree.ElementTree as ET
 root = ET.parse('/tmp/window.xml').getroot()
 for node in root.iter('node'):
     if 'APK Center' in node.attrib.get('text', ''):
-        nums = list(map(int, re.findall(r'\\d+', node.attrib.get('bounds', ''))))
+        nums = list(map(int, re.findall(r'\d+', node.attrib.get('bounds', ''))))
         if len(nums) == 4:
             print((nums[0]+nums[2])//2, (nums[1]+nums[3])//2)
             break
