@@ -283,6 +283,8 @@ public final class MainActivity extends Activity {
         heading.addView(text("Your favorites", 23, WHITE, true));
         heading.addView(text("    OK to open  •  Hold OK or MENU for options", 12, MUTED, false));
         heading.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        heading.addView(button("Manage selected", this::manageSelected, false),
+                margins(-2, 41, 0, 0, 8, 0));
         heading.addView(button("+ Add apps", () -> showPage(APPS), false),
                 margins(-2, 41, 0, 0, 0, 0));
 
@@ -335,7 +337,9 @@ public final class MainActivity extends Activity {
             }
             @Override public void afterTextChanged(Editable e) { }
         });
-        bar.addView(button("↻ Refresh", () -> scanApps(), false), margins(-2, 44, 14, 0, 0, 0));
+        bar.addView(button("↻ Refresh", () -> scanApps(), false), margins(-2, 44, 14, 0, 8, 0));
+        bar.addView(button("Manage selected", this::manageSelected, false),
+                margins(-2, 44, 0, 0, 0, 0));
 
         FrameLayout content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -397,6 +401,16 @@ public final class MainActivity extends Activity {
             Collections.sort(displayed, (a, b) -> a.label.compareToIgnoreCase(b.label));
         }
         if (adapter != null) adapter.notifyDataSetChanged();
+    }
+
+    private void manageSelected() {
+        if (displayed.isEmpty()) {
+            Toast.makeText(this, "Choose an app first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int position = grid == null ? -1 : grid.getSelectedItemPosition();
+        if (position < 0 || position >= displayed.size()) position = 0;
+        showAppOptions(displayed.get(position));
     }
 
     private void showAppOptions(Entry item) {
