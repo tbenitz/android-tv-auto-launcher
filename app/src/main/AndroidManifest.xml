@@ -25,7 +25,7 @@
         android:theme="@style/AppTheme"
         android:supportsRtl="true">
         <activity
-            android:name=".MainActivity"
+            android:name="io.github.tbenitz.tvautolaunch.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:banner="@drawable/tv_banner">
@@ -43,7 +43,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <receiver android:name=".BootReceiver" android:exported="false">
+        <receiver android:name="io.github.tbenitz.tvautolaunch.BootReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
