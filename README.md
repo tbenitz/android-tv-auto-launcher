@@ -1,6 +1,6 @@
 # Orbit TV Launcher — v2.0.0-preview1 (Mi Box-safe preview)
 
-> **Safety notice:** Do NOT change your TV's default Home launcher to this preview before testing it. A freeze was reported with v1.1.1 on Mi Box. Downloads on the GitHub Pages landing site are paused until the redesigned launcher has been checked on physical hardware. Previous versions should not be used as Home.
+> **Safety notice:** Do NOT change your TV's default Home launcher to this preview before testing it. A freeze was reported with v1.1.1 on Mi Box. The older builds remain unsafe as default Home; the site links to preview releases for cautious testing. Previous versions should not be used as Home.
 
 ## Repair notes
 - Replaced the v1.1.1 zero-height All Apps dialog (which could make app selection inaccessible) with a full-screen GridView app picker that uses the TV remote.
@@ -13,7 +13,7 @@
 - No remote ADB, accessibility, or root permissions are requested. Only APK Center uses INTERNET and the standard user-approved APK installer permission.
 
 ## Preview is isolated from your old launcher
-Debug builds use the distinct app package **`io.github.tbenitz.tvautolaunch.preview`**, install alongside the disabled production launcher, and are labeled **TV Auto Launch Preview**. They do not replace or re-enable the broken app. This helps avoid signature errors and keeps the existing Home package untouched. The preview still supports becoming HOME, but **do not choose it as Home before manually testing its screens**.
+Debug builds use the distinct app package **`io.github.tbenitz.tvautolaunch.preview`**, install alongside the disabled production launcher, and are labeled **Orbit TV Preview**. They do not replace or re-enable the broken app. This helps avoid signature errors and keeps the existing Home package untouched. The preview still supports becoming HOME, but **do not choose it as Home before manually testing its screens**.
 
 ## Safe test plan (without changing your working Mi Box Home)
 1. Restore and retain your original Mi Box Home, as you already did.
@@ -37,7 +37,7 @@ The workflow on GitHub Actions builds Android API 35, Java 17, Gradle 8.9. Previ
 ## What it does
 The new remote-friendly Home has a startup card, scrolling favorites tiles, searchable All apps, dedicated Settings, a clock toggle, 3–6 grid columns, a dark theme switch, and immediate/1/3/5-second startup options. Favorites migrate from the existing SharedPreferences where upgrade signing permits.
 
-The app is MIT licensed, has no internet permission or tracking, and is Android 6.0+ compatible in the build configuration.
+The app is MIT licensed, uses Internet only for user-initiated APK sources, contains no advertising or tracking, and targets Android 6.0+ devices.
 
 ## v2: Orbit TV features
 - Keep the old production package untouched: GitHub Actions preview remains `io.github.tbenitz.tvautolaunch.preview`.
