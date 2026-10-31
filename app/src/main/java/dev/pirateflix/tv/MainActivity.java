@@ -510,11 +510,12 @@ public final class MainActivity extends Activity {
         final int dir = key == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
         if (customVideoView != null) { beginSeek(dir); return; }
         webView.evaluateJavascript("window.PFTV&&window.PFTV.hasPlayer()", value -> {
-            if ((dir > 0 ? rightHeld : leftHeld) && "true".equals(value)) {
-                beginSeek(dir);
-            } else if ((dir > 0 ? rightHeld : leftHeld)) {
-                sendNav(arrow);
-            }
+            if ("true".equals(value)) {
+                // Callback can arrive after KEY_UP. A short tap must still seek once,
+                // but must never leave a hold timer running after release.
+                if (dir > 0 ? rightHeld : leftHeld) beginSeek(dir);
+                else seekVideo(dir * 15.0, true);
+            } else sendNav(arrow);
         });
     }
 
