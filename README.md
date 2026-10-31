@@ -1,4 +1,4 @@
-# TV Auto Launch — v1.2.0-rc2 stability preview
+# Orbit TV Launcher — v2.0.0-preview1 (Mi Box-safe preview)
 
 > **Safety notice:** Do NOT change your TV's default Home launcher to this preview before testing it. A freeze was reported with v1.1.1 on Mi Box. Downloads on the GitHub Pages landing site are paused until the redesigned launcher has been checked on physical hardware. Previous versions should not be used as Home.
 
@@ -10,7 +10,7 @@
 - Startup target is attempted only from the foreground HOME Activity, at most once per boot. The original 350 ms transition is gone; firmware animation may still flash.
 - Android's system Home role is requested only after an explicit warning; the app never disables system launchers.
 - If an app is missing or fails to launch, the Home screen remains accessible.
-- No remote ADB, internet, accessibility, or root permissions are requested by the launcher.
+- No remote ADB, accessibility, or root permissions are requested. Only APK Center uses INTERNET and the standard user-approved APK installer permission.
 
 ## Preview is isolated from your old launcher
 Debug builds use the distinct app package **`io.github.tbenitz.tvautolaunch.preview`**, install alongside the disabled production launcher, and are labeled **TV Auto Launch Preview**. They do not replace or re-enable the broken app. This helps avoid signature errors and keeps the existing Home package untouched. The preview still supports becoming HOME, but **do not choose it as Home before manually testing its screens**.
@@ -38,3 +38,13 @@ The workflow on GitHub Actions builds Android API 35, Java 17, Gradle 8.9. Previ
 The new remote-friendly Home has a startup card, scrolling favorites tiles, searchable All apps, dedicated Settings, a clock toggle, 3–6 grid columns, a dark theme switch, and immediate/1/3/5-second startup options. Favorites migrate from the existing SharedPreferences where upgrade signing permits.
 
 The app is MIT licensed, has no internet permission or tracking, and is Android 6.0+ compatible in the build configuration.
+
+## v2: Orbit TV features
+- Keep the old production package untouched: GitHub Actions preview remains `io.github.tbenitz.tvautolaunch.preview`.
+- Home quick actions: APK Center, All apps, Android settings, and recovery.
+- **OK launches an app. Hold OK (or use MENU/INFO when supported) for app actions.** The app action menu manages favorites, startup selection, ordering, app information, and Android-confirmed uninstall.
+- APK Center supports public GitHub Releases (choose an actual .apk asset), HTTPS APK URLs, an official F-Droid APK download, and the Android system file picker for USB/local files.
+- APKs download in background, with progress and a 400 MB safety limit. GitHub-provided SHA-256 is checked when present, and downloads are checked for a recognizable APK package before asking Android to install.
+- No silent installs: user grants Android's 'Install unknown apps' permission for the launcher and confirms every install in Android's installer.
+- GitHub repository names are remembered locally. This is not yet a complete catalog, background auto-updater, or phone-to-TV uploader.
+- **Do not set preview as Home without testing on real hardware.** The old Mi Box freeze warning still applies. Re-enable stock launcher before attempting any ADB changes.

@@ -17,7 +17,7 @@ echo "Preview PID: $pid"
 
 adb shell uiautomator dump /sdcard/window.xml >/dev/null
 adb shell cat /sdcard/window.xml > /tmp/window.xml
-grep -q "AUTO LAUNCH" /tmp/window.xml || { echo "Expected native Home screen not found"; cat /tmp/window.xml; exit 1; }
+grep -q "TV LAUNCHER" /tmp/window.xml || { echo "Expected native Home screen not found"; cat /tmp/window.xml; exit 1; }
 grep -q "Apps" /tmp/window.xml || { echo "Apps navigation missing"; exit 1; }
 grep -q "Settings" /tmp/window.xml || { echo "Settings navigation missing"; exit 1; }
 
@@ -32,8 +32,8 @@ adb shell screencap -p /sdcard/tv-apps.png
 adb pull /sdcard/tv-apps.png tv-apps.png >/dev/null
 
 # On the 1920 x 1080 TV AVD, the first visible app tile is near (160,380).
-# Tapping it must show a real app-actions dialog, not the old blank zero-height list.
-adb shell input tap 170 360
+# Holding it must show a real app-actions dialog; a normal OK now launches the app.
+adb shell input swipe 170 360 170 360 1200
 sleep 2
 adb shell uiautomator dump /sdcard/actions.xml >/dev/null
 adb shell cat /sdcard/actions.xml > /tmp/actions.xml
