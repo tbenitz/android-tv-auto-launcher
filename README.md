@@ -1,40 +1,61 @@
-# TV Auto Launch — v1.2.0-rc2 stability preview
+# PirateFlix TV — fullscreen Android app
 
-> **Safety notice:** Do NOT change your TV's default Home launcher to this preview before testing it. A freeze was reported with v1.1.1 on Mi Box. Downloads on the GitHub Pages landing site are paused until the redesigned launcher has been checked on physical hardware. Previous versions should not be used as Home.
-
-## Repair notes
-- Replaced the v1.1.1 zero-height All Apps dialog (which could make app selection inaccessible) with a full-screen GridView app picker that uses the TV remote.
-- Removed synchronous PackageManager queries and icon loading from the UI thread: apps now load on a worker thread and the Home screen stays responsive while scanning.
-- Home, All apps, and Settings are permanent top-level navigation screens, with Back returning to Home. Favorites and startup app are managed with visible OK actions rather than relying on long-press.
-- On a fresh installation, auto-launch is OFF until an app is explicitly selected as the startup app. Any previously saved preference is preserved.
-- Startup target is attempted only from the foreground HOME Activity, at most once per boot. The original 350 ms transition is gone; firmware animation may still flash.
-- Android's system Home role is requested only after an explicit warning; the app never disables system launchers.
-- If an app is missing or fails to launch, the Home screen remains accessible.
-- No remote ADB, internet, accessibility, or root permissions are requested by the launcher.
-
-## Preview is isolated from your old launcher
-Debug builds use the distinct app package **`io.github.tbenitz.tvautolaunch.preview`**, install alongside the disabled production launcher, and are labeled **TV Auto Launch Preview**. They do not replace or re-enable the broken app. This helps avoid signature errors and keeps the existing Home package untouched. The preview still supports becoming HOME, but **do not choose it as Home before manually testing its screens**.
-
-## Safe test plan (without changing your working Mi Box Home)
-1. Restore and retain your original Mi Box Home, as you already did.
-2. Install this preview as an ordinary sideloaded app. The preview has a different package identifier, so it installs alongside the disabled old app; no uninstall is required.
-3. Open TV Auto Launch from your original TV's Apps list.
-4. Confirm **All apps** opens, icons load, D-pad can move through every row, OK shows actions, you can add/remove favorites, set a startup target, launch another app and return, and enter Android settings.
-5. **Do not assign it as Home until those tests succeed.** This GitHub APK is a preview, not a firmware-verified fix.
-
-## Emergency recovery from a connected Android-phone ADB shell
-**Only if** your original Xiaomi Android TV Home package is `com.google.android.tvlauncher`:
-```sh
-pm enable --user 0 com.google.android.tvlauncher
-pm disable-user --user 0 io.github.tbenitz.tvautolaunch.preview
-input keyevent 3
-```
-Those recovery commands are for the preview app. To disable the older non-preview app instead, use `io.github.tbenitz.tvautolaunch`. Verify that the first command succeeded before disabling any launcher. This leaves the app installed and retains its settings. Do not factory reset or uninstall a launcher while it is the only enabled HOME handler.
-
-## Building
-The workflow on GitHub Actions builds Android API 35, Java 17, Gradle 8.9. Preview APKs use an ephemeral CI debug signer; Android generally cannot update an APK that was signed by a different debug key. Stable publishing requires a persistent private release keystore, not a key committed to the public repository.
+A minimal, remote-friendly Android APK that opens **https://pirate-flix.pages.dev/** as a full-screen website. It is a WebView wrapper, **not** a copy of the website, content catalog, or independent media player.
 
 ## What it does
-The new remote-friendly Home has a startup card, scrolling favorites tiles, searchable All apps, dedicated Settings, a clock toggle, 3–6 grid columns, a dark theme switch, and immediate/1/3/5-second startup options. Favorites migrate from the existing SharedPreferences where upgrade signing permits.
 
-The app is MIT licensed, has no internet permission or tracking, and is Android 6.0+ compatible in the build configuration.
+- **Edge-to-edge fullscreen** website; no browser address bar or permanent toolbar.
+- **Open last page on restart.** Saves the website's last URL as you navigate, including routes and query parameters. Existing cookies and site local storage are handled by Android WebView.
+- **Go Home anytime** via the remote MENU button or by holding BACK for about 0.65 seconds. The menu also includes Back, Reload, and Exit.
+- **Back one page** with a short press of BACK; when there is no browser history, it shows the menu instead of immediately exiting.
+- **HTML5 fullscreen video**, including user-initiated fullscreen playback.
+- **TV remote D-pad / OK** and ordinary taps supported by Android WebView, with a standard Android file chooser for any file inputs.
+- **Android TV launcher tile** and ordinary Android phone/tablet launcher entry. No account, settings screen, or API key needed.
+- **Automatic retry screen** if the main website cannot load; Chrome/WebView manages its usual browser cache and cookies.
+
+> **Restore scope:** The app remembers the last URL on `pirate-flix.pages.dev`. It does not save a video's exact playback position or website views that don't change URL; those depend on what the website itself stores in the browser. Links to unrelated sites are not restored on startup.
+>
+> **Media limitations:** Playback and DRM depend on the website and the installed **Android System WebView**. An embedded video or codec unsupported by that system component may not work simply because this wrapper is installed.
+
+## Install the APK from GitHub Actions
+
+1. Create a new public repository named `pirateflix-tv-android` at https://github.com/new (if one does not exist).
+2. Upload **all the files and folders inside this ZIP**, preserving their paths including the hidden `.github/workflows/build-apk.yml` file, to the repository's main branch. You can also push them with Git.
+3. In the repository, open **Actions → Build Android APK**. The push build runs automatically if Actions are enabled; otherwise use **Run workflow**.
+4. After the build finishes successfully, open the run's **Artifacts**, download `PirateFlix-TV-APK` (ZIP), and extract `PirateFlix-TV.apk`.
+5. Copy the APK onto your TV (USB, shared folder, or file-transfer app), allow installation from that source, and install. The app appears as **PirateFlix TV** in your TV's app list.
+
+**No Android Studio or local build tools required** for the GitHub build. Artifacts may require signing in to GitHub to download. Each default workflow build is debug-signed with the runner's Android debug key; later builds may have a different signature, so you may have to uninstall before installing a new build. For seamless upgrades, configure a persistent release-signing keystore and a release build before distributing updates.
+
+## Optional local build
+
+With JDK 17+, the Android SDK 35 installed, and Gradle 8.10.2:
+
+```sh
+gradle assembleDebug
+```
+
+The installable APK is then at `app/build/outputs/apk/debug/app-debug.apk`.
+
+## Controls
+
+| Remote action | Result |
+|---|---|
+| D-pad / OK | Navigate and interact with the website (where supported by the webpage) |
+| Short BACK | Exit fullscreen video first, otherwise previous webpage; shows menu if at start |
+| Hold BACK for about 0.65 seconds | Open navigation menu |
+| MENU button | Open navigation menu |
+| Menu → Go to PirateFlix Home | Navigate to homepage and clear WebView back history |
+| Menu → Reload page | Refresh current page |
+| Menu → Exit app | Close the app |
+
+## Files
+
+- `app/src/main/java/dev/pirateflix/tv/MainActivity.java` — WebView, navigation, fullscreen video, URL restoration.
+- `app/src/main/AndroidManifest.xml` — permissions and TV launcher intent.
+- `.github/workflows/build-apk.yml` — GitHub Actions APK build and optional tag release.
+- `app/src/main/res/drawable-nodpi/tv_banner.png` — Android TV launcher banner.
+
+## Privacy & scope
+
+The app requests **INTERNET only**, and does not itself bundle content or host video. Page data and network requests go to the destination site (and any third-party services it loads). The user is responsible for ensuring they access media lawfully. This is an independent WebView wrapper, not an official app or a substitute for the underlying website.

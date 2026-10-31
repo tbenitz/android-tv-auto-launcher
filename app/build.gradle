@@ -3,43 +3,23 @@ plugins {
 }
 
 android {
-    namespace 'io.github.tbenitz.tvautolaunch'
+    namespace 'dev.pirateflix.tv'
     compileSdk 35
-    buildToolsVersion '35.0.0'
 
     defaultConfig {
-        applicationId 'io.github.tbenitz.tvautolaunch'
+        applicationId 'dev.pirateflix.tv'
         minSdk 23
         targetSdk 35
-        versionCode 6
-        versionName '1.2.0-rc2'
+        versionCode 1
+        versionName '1.0.0'
     }
 
-    // A signed release APK can be produced with GitHub Actions signing secrets.
-    def ksPath = System.getenv('SIGNING_KEYSTORE_PATH')
-    def ksPassword = System.getenv('SIGNING_STORE_PASSWORD')
-    def signAlias = System.getenv('SIGNING_KEY_ALIAS')
-    def signKeyPass = System.getenv('SIGNING_KEY_PASSWORD')
-    def canSign = ksPath && ksPassword && signAlias && signKeyPass
-    signingConfigs {
-        if (canSign) {
-            production {
-                storeFile file(ksPath)
-                storePassword ksPassword
-                keyAlias signAlias
-                keyPassword signKeyPass
-            }
-        }
-    }
     buildTypes {
         release {
             minifyEnabled false
-            if (canSign) signingConfig signingConfigs.production
-        }
-        debug {
-            applicationIdSuffix '.preview'
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
