@@ -4,7 +4,7 @@ A lightweight, remote-controlled Android TV HOME replacement that lets you choos
 
 > **State of project:** Source and automated build pipeline provided. Actual hardware behavior has **not** been verified on every Android TV/Google TV firmware. GitHub Actions produces an APK after the code is uploaded; no APK binary is committed to the repository.
 
-## New in v1.1.0 — Favorites Home screen
+## New in v1.1.1 — Favorites Home screen
 
 This version turns the original setup screen into a remote-friendly Home launcher. It includes a scrolling app-icon **favorites grid** (3, 4, 5 or 6 columns), a prominent **startup app** card, a searchable **All apps** chooser, hold-OK actions to reorder and unpin favorites, and a separate **Settings** panel. Startup apps are automatically pinned to favorites. Existing v1.0 selections migrate into the grid.
 

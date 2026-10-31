@@ -220,10 +220,10 @@ public final class MainActivity extends Activity {
         hero.setGravity(Gravity.CENTER_VERTICAL);
         hero.setPadding(dp(18), dp(12), dp(16), dp(12));
         hero.setBackground(panel(surface(), 19, 0xff345873, 1));
-        root.addView(hero, params(-1, dp(114), 0, 20, 0, 22));
+        root.addView(hero, params(-1, 114, 0, 20, 0, 22));
         startupIcon = new ImageView(this);
         startupIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        hero.addView(startupIcon, params(dp(56), dp(56), 0, 0, 22, 0));
+        hero.addView(startupIcon, params(56, 56, 0, 0, 22, 0));
         LinearLayout heroText = vertical();
         heroText.addView(text("STARTS WHEN TV RESTARTS", 11, AQUA, true));
         startupName = text("Choose a startup app", 25, WHITE, true);
@@ -235,7 +235,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout sectionHead = horizontal();
         sectionHead.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(sectionHead, params(-1, dp(49), 0, 0, 0, 12));
+        root.addView(sectionHead, params(-1, 49, 0, 0, 0, 12));
         TextView heading = text("Your favorites", 24, WHITE, true);
         sectionHead.addView(heading);
         favoriteCount = text("", 13, MUTED, false);
@@ -425,7 +425,7 @@ public final class MainActivity extends Activity {
         search.setTextSize(17);
         search.setHint("Search installed apps…");
         search.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
-        layout.addView(search, params(-1, dp(50), 0, 0, 0, 12));
+        layout.addView(search, params(-1, 50, 0, 0, 0, 12));
         ListView list = new ListView(this);
         list.setChoiceMode(ListView.CHOICE_MODE_NONE);
         List<AppEntry> shown = new ArrayList<>(options);
@@ -437,7 +437,7 @@ public final class MainActivity extends Activity {
                 AppEntry app = shown.get(position);
                 ImageView icon = new ImageView(MainActivity.this);
                 icon.setImageDrawable(app.icon);
-                item.addView(icon, params(dp(39), dp(39), 0, 0, 15, 0));
+                item.addView(icon, params(39, 39, 0, 0, 15, 0));
                 LinearLayout textGroup = vertical();
                 TextView label = text(app.name + (favoritePackages.contains(app.pkg) ? "  ★" : ""), 17, WHITE, true);
                 textGroup.addView(label);
@@ -481,8 +481,13 @@ public final class MainActivity extends Activity {
             return true;
         });
         dlg.setOnShowListener(v -> {
-            dlg.getWindow().setLayout(dp(Math.min(730, Math.max(450, getResources().getDisplayMetrics().widthPixels
-                    / getResources().getDisplayMetrics().density - 120))), dp(510));
+            int width = Math.round(getResources().getDisplayMetrics().widthPixels /
+                    getResources().getDisplayMetrics().density);
+            int height = Math.round(getResources().getDisplayMetrics().heightPixels /
+                    getResources().getDisplayMetrics().density);
+            if (dlg.getWindow() != null)
+                dlg.getWindow().setLayout(dp(Math.min(730, Math.max(280, width - 90))),
+                        dp(Math.min(510, Math.max(200, height - 70))));
             list.requestFocus();
         });
         dlg.show();
@@ -596,11 +601,7 @@ public final class MainActivity extends Activity {
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(launch);
             // No 350ms wait, no Home animation when jumping directly to startup target.
-            if (Build.VERSION.SDK_INT >= 34) {
-                overridePendingTransition(0, 0);
-            } else {
-                overridePendingTransition(0, 0);
-            }
+            overridePendingTransition(0, 0);
             return true;
         } catch (RuntimeException ex) {
             if (showErrors) Toast.makeText(this, "Could not start that app. Try Refresh from All apps.",
@@ -704,12 +705,14 @@ public final class MainActivity extends Activity {
         b.setText(title);
         b.setTextSize(14);
         b.setAllCaps(false);
-        b.setTextColor(WHITE);
+        b.setTextColor(new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_focused}, new int[]{}},
+                new int[]{0xff062031, WHITE}));
         b.setFocusable(true);
         b.setBackground(buttonBackground(prominent));
         b.setPadding(dp(12), 0, dp(12), 0);
         b.setOnClickListener(action);
-        parent.addView(b, params(-2, dp(45), 0, 0, 12, 0));
+        parent.addView(b, params(-2, 45, 0, 0, 12, 0));
         return b;
     }
 
@@ -798,7 +801,7 @@ public final class MainActivity extends Activity {
             ImageView icon = new ImageView(MainActivity.this);
             icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
             icon.setImageDrawable(app.icon);
-            item.addView(icon, params(dp(65), dp(65), 0, 0, 0, 7));
+            item.addView(icon, params(65, 65, 0, 0, 0, 7));
             TextView label = text(app.name, 16, WHITE, true);
             label.setGravity(Gravity.CENTER);
             label.setMaxLines(1);
