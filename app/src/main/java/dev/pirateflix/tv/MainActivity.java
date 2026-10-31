@@ -42,6 +42,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 
 /** Native Android-TV remote layer around the first-party PirateFlix website. */
 public final class MainActivity extends Activity {
@@ -64,6 +66,8 @@ public final class MainActivity extends Activity {
     private android.webkit.ValueCallback<Uri[]> fileCallback;
     private String navigationScript;
     private String mediaFrameScript;
+    private NativePlayerController nativePlayer;
+    private int probeGeneration=0;
     private boolean clearHistoryOnHome;
     private boolean backHeld;
     private boolean backMenuShown;
@@ -87,7 +91,7 @@ public final class MainActivity extends Activity {
     };
     private final Runnable seekTask = new Runnable() {
         @Override public void run() {
-            if (seekDirection == 0 || webView == null) return;
+            if (seekDirection == 0 || (webView == null && (nativePlayer == null || !nativePlayer.active()))) return;
             long hold = android.os.SystemClock.uptimeMillis() - seekStartMs;
             // Rate while holding: 15, 30, 60, 120, eventually 240 seconds per second.
             double rate = hold > 4800 ? 240 : hold > 3300 ? 120 : hold > 2100 ? 60
@@ -110,6 +114,13 @@ public final class MainActivity extends Activity {
         mediaFrameScript = loadAsset("iframe-media.js");
         applyImmersiveMode();
         buildLayout();
+        nativePlayer=new NativePlayerController(this,root,new NativePlayerController.Events(){
+            @Override public void onError(String detail){ showStatus(detail); }
+            @Override public void onClose(){ evaluateTv("window.PFTV&&window.PFTV.nativePip(false)"); }
+            @Override public void onModeChanged(boolean pip){
+                evaluateTv("window.PFTV&&window.PFTV.nativePip("+pip+")");
+            }
+        });
         createWebView();
         boolean restored = false;
         if (state != null) {
@@ -260,6 +271,7 @@ public final class MainActivity extends Activity {
                 rememberSiteUrl(url);
                 loading.setVisibility(View.GONE);
                 installTvNavigation();
+                handler.postDelayed(() -> probeNativeStream(false),800L);
                 if (clearHistoryOnHome && isHomeUrl(url)) {
                     view.clearHistory();
                     clearHistoryOnHome = false;
@@ -383,23 +395,82 @@ public final class MainActivity extends Activity {
             return;
         }
         webView.evaluateJavascript("window.PFTV&&window.PFTV.key('"+direction+"')", response -> {
-            if ("null".equals(response) || "false".equals(response)) installTvNavigation();
+            if ("\"pip\"".equals(response) && nativePlayer!=null && nativePlayer.isMini()){
+                nativePlayer.focus();showStatus("Mini-player: Left/Right select • OK to activate • Up to browse");
+            } else if ("null".equals(response) || "false".equals(response)) installTvNavigation();
         });
     }
 
     private void activateSelected() {
         if (webView == null) return;
         webView.evaluateJavascript("window.PFTV&&window.PFTV.key('OK')", result -> {
+            if ("\"search\"".equals(result)) { showSearchDialog();return; }
             if ("\"keyboard\"".equals(result)) {
                 keyboardRequested = true;
                 handler.postDelayed(() -> {
                     if (webView != null) {
                         webView.requestFocus();
-                        InputMethodManager ime = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                        ime.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT);
+                        InputMethodManager ime=(InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+                        ime.showSoftInput(webView,InputMethodManager.SHOW_IMPLICIT);
                     }
-                }, 130L);
+                },160L);
+            } else if ("\"ok\"".equals(result)) {
+                // A title/source click may render its video after an asynchronous fetch.
+                scheduleNativeProbes();
             }
+        });
+    }
+
+    private void showSearchDialog(){
+        final EditText input=new EditText(this);
+        input.setSingleLine(true);input.setHint("Movie, show, or US channel");
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        int pad=dp(22);
+        LinearLayout wrapper=new LinearLayout(this);
+        wrapper.setPadding(pad,dp(5),pad,0);
+        wrapper.addView(input,new LinearLayout.LayoutParams(-1,-2));
+        final AlertDialog dialog=new AlertDialog.Builder(this)
+            .setTitle("Search PirateFlix")
+            .setView(wrapper)
+            .setPositiveButton("Search",(d,w)->{
+                String term=input.getText().toString().trim();
+                if(term.isEmpty())return;
+                evaluateTv("window.PFTV&&window.PFTV.search("+JSONObject.quote(term)+")");
+            }).setNegativeButton("Cancel",null).create();
+        dialog.setOnDismissListener(d->applyImmersiveMode());
+        dialog.setOnShowListener(d->{
+            input.requestFocus();
+            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+            handler.postDelayed(()->{
+                InputMethodManager ime=(InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+                ime.showSoftInput(input,InputMethodManager.SHOW_IMPLICIT);
+            },190L);
+        });
+        dialog.show();
+    }
+
+    private void scheduleNativeProbes(){
+        final int token=++probeGeneration;
+        for(long delay:new long[]{850L,1900L,3600L,6700L})
+            handler.postDelayed(()->{if(token==probeGeneration)probeNativeStream(false);},delay);
+    }
+    private void probeNativeStream(boolean explicit){
+        if(webView==null || nativePlayer==null || !isSiteUrl(webView.getUrl()))return;
+        webView.evaluateJavascript("window.PFTV&&window.PFTV.directStream()", result->{
+            try{
+                Object decoded=new JSONTokener(result).nextValue();
+                String raw=decoded instanceof String?(String)decoded:"";
+                if(raw.isEmpty()){if(explicit)showStatus("No direct video URL on this page. Choose a different source or use its web player.");return;}
+                JSONObject item=new JSONObject(raw);
+                String url=item.optString("url",""),ref=item.optString("referer",HOME_URL);
+                if(!nativePlayer.playable(url)){if(explicit)showStatus("This source cannot open in the native player");return;}
+                // Do not restart a playing stream on periodic checks.
+                if(nativePlayer.active() && !explicit)return;
+                if(nativePlayer.play(url,ref)){
+                    // Stop web video to prevent a duplicate audio stream underneath native playback.
+                    evaluateTv("document.querySelectorAll('video').forEach(v=>{try{v.pause()}catch(e){}})");
+                }
+            }catch(Exception ignored){if(explicit)showStatus("No supported direct media address available");}
         });
     }
 
@@ -411,6 +482,12 @@ public final class MainActivity extends Activity {
     }
 
     private void seekVideo(double seconds, boolean first) {
+        if(nativePlayer!=null && nativePlayer.active()){
+            boolean moved=nativePlayer.seek(Math.round(seconds*1000));
+            if(first)showStatus(moved?nativePlayer.clock()+"  •  hold to accelerate":"Live stream or unknown duration: seeking unavailable");
+            if(!moved)stopSeek();
+            return;
+        }
         if (webView == null) return;
         String n = String.format(Locale.US, "%.2f", seconds);
         webView.evaluateJavascript("window.PFTV&&window.PFTV.seek("+n+")", value -> {
@@ -425,6 +502,9 @@ public final class MainActivity extends Activity {
     }
 
     private void seekPercent(int percent) {
+        if(nativePlayer!=null && nativePlayer.active()){
+            showStatus(nativePlayer.jumpPercent(percent)?nativePlayer.clock():"This live stream cannot seek");return;
+        }
         if (webView == null) return;
         webView.evaluateJavascript("window.PFTV&&window.PFTV.seekPercent("+percent+")", result -> {
             if ("\"unsupported\"".equals(result) || "\"no-player\"".equals(result))
@@ -457,6 +537,10 @@ public final class MainActivity extends Activity {
                             seconds=Math.addExact(Math.multiplyExact(seconds,60),value);
                         }
                         if(seconds>86400)throw new NumberFormatException();
+                        if(nativePlayer!=null && nativePlayer.active()){
+                            showStatus(nativePlayer.jumpTo(seconds*1000L)?nativePlayer.clock():"This live stream cannot seek");
+                            return;
+                        }
                         if (webView != null) webView.evaluateJavascript("window.PFTV&&window.PFTV.seekTo("+seconds+")", result -> {
                             if ("\"unsupported\"".equals(result) || "\"no-player\"".equals(result))
                                 showStatus("This source does not allow seeking to a time");
@@ -496,6 +580,18 @@ public final class MainActivity extends Activity {
             sendNav(key == KeyEvent.KEYCODE_DPAD_DOWN ? "DOWN" : "UP");
             return;
         }
+        if(nativePlayer!=null && nativePlayer.isFocused()){
+            if(key==KeyEvent.KEYCODE_DPAD_LEFT)nativePlayer.move(-1);
+            if(key==KeyEvent.KEYCODE_DPAD_RIGHT)nativePlayer.move(1);
+            if(key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_DOWN)nativePlayer.blur();
+            return;
+        }
+        if(nativePlayer!=null && nativePlayer.isFullscreen()){
+            if(key==KeyEvent.KEYCODE_DPAD_LEFT || key==KeyEvent.KEYCODE_DPAD_RIGHT)
+                beginSeek(key==KeyEvent.KEYCODE_DPAD_RIGHT?1:-1);
+            if(key==KeyEvent.KEYCODE_DPAD_UP)showSeekMenu();
+            return;
+        }
         if (keyboardRequested || webView == null) return;
         final String arrow = key == KeyEvent.KEYCODE_DPAD_UP ? "UP" :
                 key == KeyEvent.KEYCODE_DPAD_DOWN ? "DOWN" :
@@ -523,7 +619,7 @@ public final class MainActivity extends Activity {
         final int code = event.getKeyCode();
         // Optional passthrough: let inaccessible iframe/native player controls receive remote keys.
         // Back/Menu/Info remain handled by this activity so the user can always exit this mode.
-        if (passthroughPlayerKeys && (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN ||
+        if (passthroughPlayerKeys && (nativePlayer==null || !nativePlayer.active()) && (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN ||
                 code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT ||
                 code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER ||
                 code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD || code == KeyEvent.KEYCODE_MEDIA_REWIND ||
@@ -574,7 +670,9 @@ public final class MainActivity extends Activity {
             } else if (up) {
                 handler.removeCallbacks(longOkAction);
                 if (okHeld && !okMenuShown && !event.isCanceled()) {
-                    if (customVideoView!=null) evaluateTv("window.PFTV&&window.PFTV.togglePlayback()");
+                    if(nativePlayer!=null&&nativePlayer.isFocused())nativePlayer.confirm();
+                    else if(nativePlayer!=null&&nativePlayer.isFullscreen())nativePlayer.toggle();
+                    else if (customVideoView!=null) evaluateTv("window.PFTV&&window.PFTV.togglePlayback()");
                     else activateSelected();
                 }
                 okHeld=false;
@@ -588,7 +686,8 @@ public final class MainActivity extends Activity {
             return true;
         }
         if (code==KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || code==KeyEvent.KEYCODE_MEDIA_PLAY || code==KeyEvent.KEYCODE_MEDIA_PAUSE) {
-            if (down) evaluateTv("window.PFTV&&window.PFTV.togglePlayback()"); return true;
+            if(down){if(nativePlayer!=null&&nativePlayer.active())nativePlayer.toggle();
+               else evaluateTv("window.PFTV&&window.PFTV.togglePlayback()");}return true;
         }
         return super.dispatchKeyEvent(event);
     }
@@ -617,6 +716,10 @@ public final class MainActivity extends Activity {
 
     private void handleShortBack() {
         stopSeek();
+        if(nativePlayer!=null&&nativePlayer.isFullscreen()){
+            nativePlayer.minimize();evaluateTv("window.PFTV&&window.PFTV.enterTV()");return;
+        }
+        if(nativePlayer!=null&&nativePlayer.isFocused()){nativePlayer.blur();return;}
         if (keyboardRequested) { hideKeyboard(); return; }
         if (customVideoView != null) { exitFullScreenVideo(); return; }
         if (webView != null && isSiteUrl(webView.getUrl())) {
@@ -637,7 +740,8 @@ public final class MainActivity extends Activity {
                 "TV grid / Browse", "Website view (sources, episodes & details)",
                 "Go to PirateFlix Home", "Previous web page", "Play / Pause",
                 "Seek / Jump to position", "Change video source", "Fullscreen current player",
-                "Page zoom 40%–160%", "Player remote passthrough ON/OFF", "Reload website", "Exit app"
+                "Page zoom 40%–160%", "Player remote passthrough ON/OFF", "Reload website", "Exit app",
+                "Use native player (direct streams)", "Focus mini-player", "Close mini-player"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("PirateFlix TV • Controls")
@@ -650,13 +754,15 @@ public final class MainActivity extends Activity {
                     if (choice == 1) evaluateTv("window.PFTV&&window.PFTV.enterWebsite()");
                     if (choice == 2) goHome();
                     if (choice == 3 && webView != null && webView.canGoBack()) webView.goBack();
-                    if (choice == 4) evaluateTv("window.PFTV&&window.PFTV.togglePlayback()");
+                    if (choice == 4){if(nativePlayer!=null&&nativePlayer.active())nativePlayer.toggle();
+                        else evaluateTv("window.PFTV&&window.PFTV.togglePlayback()");}
                     if (choice == 5) showSeekMenu();
                     if (choice == 6) {
                         if (customVideoView != null) exitFullScreenVideo();
                         evaluateTv("window.PFTV&&window.PFTV.chooseSources()");
                     }
-                    if (choice == 7) evaluateTv("window.PFTV&&window.PFTV.cinema(true)");
+                    if (choice == 7){if(nativePlayer!=null&&nativePlayer.active())nativePlayer.fullscreen();
+                        else evaluateTv("window.PFTV&&window.PFTV.cinema(true)");}
                     if (choice == 8) showZoomMenu();
                     if (choice == 9) {
                         passthroughPlayerKeys = !passthroughPlayerKeys;
@@ -668,6 +774,10 @@ public final class MainActivity extends Activity {
                     }
                     if (choice == 10 && webView != null) { errorPanel.setVisibility(View.GONE); webView.reload(); }
                     if (choice == 11) finish();
+                    if (choice == 12)probeNativeStream(true);
+                    if (choice == 13){if(nativePlayer!=null&&nativePlayer.isMini())nativePlayer.focus();
+                        else showStatus("No mini-player active");}
+                    if (choice == 14){if(nativePlayer!=null&&nativePlayer.active())nativePlayer.close(true);}
                 })
                 .setNegativeButton("Cancel", null).create();
         dialog.setOnDismissListener(d -> applyImmersiveMode());
@@ -767,6 +877,8 @@ public final class MainActivity extends Activity {
         handler.removeCallbacks(longOkAction);
         if (hideStatus != null) handler.removeCallbacks(hideStatus);
         if (fileCallback != null) { fileCallback.onReceiveValue(null); fileCallback = null; }
+        ++probeGeneration;
+        if(nativePlayer!=null)nativePlayer.close(false);
         if (customVideoView != null) exitFullScreenVideo();
         if (webView != null) { root.removeView(webView); webView.stopLoading(); webView.destroy(); webView=null; }
         super.onDestroy();

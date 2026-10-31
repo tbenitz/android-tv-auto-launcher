@@ -1,14 +1,14 @@
-/* PirateFlix TV 2.0 — site-backed TV catalog and native remote adapter.
+/* PirateFlix TV 2.1 — site-backed TV catalog and native remote adapter.
  * No fabricated catalog entries. The website remains the source of navigation,
  * episode/stream selection, and user data. */
 (() => {
   'use strict';
   if (window !== window.top) return;
-  if (window.PFTV?.version === 4) { window.PFTV.zoom(window.__PFTV_ZOOM || 85); return; }
+  if (window.PFTV?.version === 5) { window.PFTV.zoom(window.__PFTV_ZOOM || 85); return; }
   const sections = ['Movies','TV Shows','Live TV','Watch Later'];
   const state = {mode:'tv', section:'Movies', area:'rail', rail:0, selected:0,
     cards:[], key:'', cinema:null, lastURL:location.href, zoom:85,
-    originalHeader:null, lastSeek:'', lastPlayer:false};
+    originalHeader:null, lastSeek:'', lastPlayer:false, nativePip:false, usFilterApplied:false, gatherStep:0, searching:false};
   const style=document.createElement('style');style.id='pftv-tv-css';
   style.textContent=`
   #pftv-shell{position:fixed!important;inset:0!important;z-index:2147483000!important;
@@ -26,31 +26,34 @@
     box-shadow:0 0 0 4px rgba(5,14,25,.7);}
   #pftv-rail-footer{margin-top:auto;color:#8da6bb;font-size:12px;padding:8px 10px;}
   #pftv-main{flex:1;min-width:0;display:flex;flex-direction:column;}
-  #pftv-top{height:96px;min-height:96px;display:flex;align-items:center;gap:20px;
-    padding:12px 30px;border-bottom:1px solid #203248;}
-  #pftv-heading{font-weight:750;font-size:28px;margin:0;white-space:nowrap;}
+  #pftv-top{height:65px;min-height:65px;display:flex;align-items:center;gap:20px;
+    padding:7px 18px;border-bottom:1px solid #203248;}
+  #pftv-heading{font-weight:750;font-size:24px;margin:0;white-space:nowrap;}
   #pftv-count{font-size:14px;color:#91b0c6;}
   #pftv-search{margin-left:auto;border-radius:10px;border:1px solid #3a5266;
-    outline:none;min-width:190px;width:min(38%,440px);height:51px;background:#101f33;
+    outline:none;min-width:190px;width:min(38%,440px);height:43px;background:#101f33;
     color:#fff;padding:0 16px;font-size:18px;}
   #pftv-search.pftv-focused{border:2px solid #40e8d2;}
   #pftv-content{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;
-    padding:26px 30px 45px;overscroll-behavior:contain;}
-  #pftv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));
-    gap:24px 16px;align-content:start;}
+    padding:8px 14px 8px;overscroll-behavior:contain;}
+  #pftv-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+    grid-auto-rows:calc((100% - 16px)/3);height:100%;min-height:0;
+    gap:8px;align-content:start;}
   .pftv-tile{background:#122339;border:1px solid #243c54;border-radius:12px;
     display:flex;flex-direction:column;text-align:left;padding:0;overflow:hidden;
-    color:white;min-height:125px;}
-  .pftv-poster{width:100%;aspect-ratio:2/3;object-fit:cover;display:block;background:#16273b;}
-  .pftv-tile.is-live .pftv-poster{aspect-ratio:16/10;object-fit:contain;padding:13px;}
-  .pftv-no-poster{width:100%;aspect-ratio:16/9;display:grid;place-items:center;
+    color:white;min-height:0;height:100%;}
+  .pftv-poster{width:100%;height:calc(100% - 31px);min-height:0;object-fit:contain;display:block;background:#16273b;}
+  .pftv-tile.is-live .pftv-poster{object-fit:contain;padding:5px;}
+  .pftv-no-poster{width:100%;height:calc(100% - 31px);display:grid;place-items:center;
     background:linear-gradient(140deg,#1b3b4f,#182037);font-size:38px;}
-  .pftv-caption{padding:9px 11px;display:block;font-size:15px;font-weight:600;
-    min-height:43px;overflow:hidden;line-height:1.35;}
+  .pftv-caption{padding:4px 8px;display:block;font-size:13px;font-weight:600;
+    flex:none;min-height:31px;height:31px;overflow:hidden;line-height:1.35;}
+  #pftv-shell.is-switching{opacity:0;transition:opacity .27s ease;}
+  .pftv-pip-label{color:#47eddb;font-size:12px;}
   #pftv-empty{padding:40px;max-width:620px;color:#c6d5e4;font-size:19px;}
   #pftv-empty button{margin-top:18px;border:1px solid #42f2d4;background:#163445;
     border-radius:10px;color:#fff;padding:13px 22px;}
-  #pftv-hint{font-size:12px;color:#9db6c7;padding:7px 30px 13px;}
+  #pftv-hint{font-size:12px;color:#9db6c7;padding:4px 16px 7px;}
   .pftv-site-focus{outline:4px solid #42f2d4!important;outline-offset:3px!important;
     box-shadow:0 0 15px rgba(50,240,214,.7)!important;}
   html.pftv-web-mode .pftv-original-header{display:none!important;}
@@ -102,9 +105,9 @@
     if(idx===4){enterWebsite();return;}
     const el=originalNav(sections[idx]);
     if(!el){toast('The website has no '+sections[idx]+' tab yet');return;}
-    state.section=sections[idx];state.selected=0;state.area='grid';
+    state.section=sections[idx];state.selected=0;state.area='grid';state.cache=new Map();state.usFilterApplied=false;
     shell.querySelector('#pftv-heading').textContent=state.section;
-    el.click();setTimeout(()=>refresh(true),350);setTimeout(()=>refresh(true),1200);renderFocus();
+    el.click();setTimeout(()=>{refresh(true);gatherMore();},700);setTimeout(()=>refresh(false),1600);renderFocus();
   }
   rail.forEach((btn,i)=>btn.addEventListener('click',()=>chooseSection(i)));
   function mediaTarget(img){
@@ -118,13 +121,23 @@
     return img;
   }
   function meaningfulImg(img){
-    if(!visible(img)||shell.contains(img)||img.closest('header,nav,footer'))return false;
-    const r=img.getBoundingClientRect(), src=img.currentSrc||img.src||'';
-    if(r.width<52||r.height<43||!src||src.startsWith('data:image/svg+xml'))return false;
+    if(shell.contains(img)||img.closest('header,nav,footer'))return false;
+    // Include offscreen lazy-loaded posters; do not require the image to be in the viewport.
+    if(!img.isConnected || img.closest('[hidden],[aria-hidden=true]'))return false;
+    const r=img.getBoundingClientRect(), src=posterURL(img);
+    if(r.width<30||r.height<25||!src||src.startsWith('data:image/svg+xml'))return false;
     if(/logo\.svg|favicon|avatar|user-icon|profile\.png/i.test(src))return false;
     const anc=mediaTarget(img);
     if(anc.closest('header,nav,footer'))return false;
     return true;
+  }
+  function posterURL(img){
+    if(!img)return '';
+    const raw=[img.getAttribute('data-src'),img.getAttribute('data-lazy-src'),img.currentSrc,
+      img.getAttribute('src'),img.getAttribute('srcset')?.split(',').pop()?.trim().split(/\s+/)[0],
+      img.parentElement?.querySelector('source[srcset]')?.srcset?.split(',').pop()?.trim().split(/\s+/)[0]].find(x=>x&& !x.startsWith('data:image/svg')&&!x.startsWith('blob:'));
+    if(!raw)return '';
+    try{return new URL(raw,location.href).href;}catch(_){return '';}
   }
   function cardFromImage(img,i){
     const node=mediaTarget(img);let title=img.alt?.trim()||img.title?.trim()||'';
@@ -137,27 +150,90 @@
     }
     if(!title||title.length<2){const raw=text(container);title=raw.split(/\n|Favorite|Watch Later|\bHD\b/)[0].slice(0,70).trim();}
     if(!title||title.length<2)title=img.alt||`Title ${i+1}`;
-    const src=img.currentSrc||img.src;
+    const src=posterURL(img);
     return {title:title.slice(0,90),image:src,target:node,sourceImg:img};
   }
+  function tryUSFilter(){
+    if(state.section!=='Live TV')return;
+    // Prefer the site's own US filter so countryless channel cards inherit a known US-only view.
+    const select=Array.from(document.querySelectorAll('select')).find(el=>!shell.contains(el)&&
+      Array.from(el.options).some(o=>/^(us|usa|united states)$/i.test(o.value.trim())||/^(us|usa|united states)$/i.test(o.text.trim())));
+    if(select){const option=Array.from(select.options).find(o=>/^(us|usa|united states)$/i.test(o.value.trim())||/^(us|usa|united states)$/i.test(o.text.trim()));
+      if(select.value!==option.value){select.value=option.value;select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}));}
+      state.usFilterApplied=true;return;
+    }
+    const buttons=Array.from(document.querySelectorAll('button,[role=option],[role=radio]')).filter(el=>!shell.contains(el));
+    const us=buttons.find(el=>/^(us|usa|united states|🇺🇸\s*us)$/i.test(text(el)));
+    if(us && !us.getAttribute('aria-pressed')?.includes('true') && !state.usFilterApplied){us.click();state.usFilterApplied=true;}
+  }
+  function countryOf(node){
+    const attrs=['data-country','data-country-code','data-region','data-iso','data-countryname'];
+    for(let el=node;el&&el!==document.body;el=el.parentElement){
+      for(const name of attrs){const x=el.getAttribute?.(name);if(x)return x.toLowerCase().trim();}
+      if(el.matches?.('[data-channel-list],[class*=channel-grid]'))break;
+    }
+    const flags=Array.from(node.querySelectorAll('[title],[aria-label],img[alt]'))
+      .map(e=>[e.getAttribute('title'),e.getAttribute('aria-label'),e.getAttribute('alt')].filter(Boolean).join(' ')).join(' ');
+    const match=flags.match(/(?:country|region)\s*[:=-]?\s*(united states|usa|us|poland|pl|canada|ca|uk|gb|world)/i);
+    return match?match[1].toLowerCase():'';
+  }
   function liveCards(){
-    const nodes=Array.from(document.querySelectorAll('[class*=channel-card],[class*=channel-item],[data-channel-id],[role=listitem]'))
-      .filter(n=>!shell.contains(n)&&visible(n)&&!n.closest('header,nav,footer'));
-    return nodes.map((node,i)=>({title:text(node.querySelector('[class*=name],h3,h4')||node).slice(0,80)||`Channel ${i+1}`,
-      image:node.querySelector('img')?.src||'',target:node,sourceImg:node.querySelector('img')}));
+    const selector='[data-channel-id],[data-channel],[class*=channel-card],[class*=channel-item],[class*=channel-tile],'+
+      '[class*=station-card],[class*=station-item],[role=listitem],.channel,article';
+    const nodes=Array.from(document.querySelectorAll(selector))
+      .filter(n=>!shell.contains(n)&&n.isConnected&&!n.closest('header,nav,footer')&&n.getBoundingClientRect().width>40);
+    const items=[];
+    for(const node of nodes){
+      const label=node.querySelector('[class*=channel-name],[class*=station-name],[class*=name],h2,h3,h4,strong');
+      const title=text(label||node).replace(/\b(favorite|unfavorite|watch now|watch|play)\b/ig,'').trim().slice(0,90);
+      if(!title||title.length<2||title.length>85)continue;
+      const country=countryOf(node);
+      // Unknown country may be shown only when the site's US filter has been applied.
+      if(country && !['us','usa','united states','united states of america','🇺🇸'].includes(country))continue;
+      if(!country&&!state.usFilterApplied)continue;
+      const img=node.querySelector('img');
+      const target=node.querySelector('a[href]:not([title*=avorite]),[role=button]:not([title*=avorite])')||node;
+      items.push({title,image:posterURL(img),target,sourceImg:img && !img.closest('button[title*=avorite]')?img:null});
+    }
+    return items;
   }
   function collect(){
+    if(state.section==='Live TV')tryUSFilter();
     const images=Array.from(document.querySelectorAll('img')).filter(meaningfulImg);
     let cards=images.map(cardFromImage);
-    if(state.section==='Live TV')cards=liveCards().concat(cards);
+    if(state.section==='Live TV'){
+      const explicit=liveCards();
+      // An image alone is not evidence of its station's country.
+      cards=explicit;
+    }
     const seen=new Set();return cards.filter(c=>{
-      const label=c.title.toLowerCase()+'|'+c.image;
+      const label=(c.title+'|'+c.image).toLowerCase();
       if(seen.has(label))return false;seen.add(label);return true;
-    }).slice(0,750);
+    }).slice(0,1000);
+  }
+  function gatherMore(){
+    if(state.mode!=='tv'||state.searching)return;
+    const pools=[document.scrollingElement,document.documentElement,...Array.from(document.querySelectorAll('main,section,[class*=list],[class*=content],[class*=grid]'))].filter(Boolean);
+    const scroll=pools.filter(el=>!shell.contains(el)&&el.scrollHeight>el.clientHeight+160)
+      .sort((a,b)=>(b.scrollHeight-b.clientHeight)-(a.scrollHeight-a.clientHeight))[0];
+    if(!scroll)return;
+    const initial=scroll.scrollTop;
+    let step=0;
+    const scan=()=>{
+      if(state.mode!=='tv'||step>=12){scroll.scrollTop=initial;refresh(true);return;}
+      scroll.scrollTop=Math.min(scroll.scrollHeight-scroll.clientHeight,step++*Math.max(300,innerHeight*.65));
+      refresh(true);setTimeout(scan,240);
+    };
+    setTimeout(scan,380);
   }
   function refresh(force){
     if(!shell.isConnected)return;
-    const cards=collect();const next=cards.map(c=>c.title+'|'+c.image).join('\n');
+    const incoming=collect();
+    // Keep previously harvested cards so virtual/lazy lists don't collapse back to 3 titles.
+    state.cache=state.cache||new Map();
+    for(const c of incoming)state.cache.set((c.title+'|'+c.image).toLowerCase(),c);
+    const cards=Array.from(state.cache.values());
+    const next=cards.map(c=>c.title+'|'+c.image).join('\n');
     if(!force&&next===state.key)return;
     state.key=next;state.cards=cards;
     grid.replaceChildren();
@@ -165,23 +241,26 @@
       const c=cards[i],button=document.createElement('button');button.type='button';
       button.className='pftv-tile'+(state.section==='Live TV'?' is-live':'');
       if(c.image){const img=document.createElement('img');img.className='pftv-poster';img.src=c.image;
-        img.loading='lazy';img.alt='';button.appendChild(img);}
+        img.loading='eager';img.decoding='async';img.alt=c.title;
+        img.onerror=()=>{img.style.display='none';button.classList.add('pftv-img-error');};button.appendChild(img);}
       else {const span=document.createElement('span');span.className='pftv-no-poster';span.textContent='▶';button.appendChild(span);}
       const caption=document.createElement('span');caption.className='pftv-caption';caption.textContent=c.title;
       button.appendChild(caption);button.addEventListener('click',()=>openCard(i));grid.appendChild(button);
     }
     shell.querySelector('#pftv-count').textContent=cards.length?`${cards.length} titles`:'Awaiting website results';
     const empty=$('#pftv-empty');empty.hidden=cards.length>0;
-    if(!cards.length)empty.innerHTML='No title cards are available to display here yet. The underlying website may be loading or using an unsupported layout. <button id="pftv-open-web">Open website view</button>';
+    if(!cards.length)empty.innerHTML=state.section==='Live TV'
+      ? 'No confirmed US channels have been found. Check the Live TV region/filter in Website view. <button id="pftv-open-web">Open website view</button>'
+      : 'Waiting for the website to load titles. <button id="pftv-open-web">Open website view</button>';
     empty.querySelector('button')?.addEventListener('click',enterWebsite);
     state.selected=Math.min(Math.max(state.selected,0),Math.max(cards.length-1,0));renderFocus();
   }
   function openCard(i){
     const c=state.cards[i];if(!c||!c.target?.isConnected){refresh(true);toast('Content changed; try again');return;}
-    state.selected=i;state.lastPlayer=false;enterWebsite();
+    state.selected=i;state.lastPlayer=false;shell.classList.add('is-switching');setTimeout(()=>{enterWebsite();shell.classList.remove('is-switching');},190);
     // Click the media image first, which bubbles to the actual card listener,
     // not its separate Favorite button.
-    if(c.sourceImg?.isConnected)c.sourceImg.click();else c.target.click();
+    setTimeout(()=>{if(c.sourceImg?.isConnected)c.sourceImg.click();else c.target.click();},200);
     setTimeout(()=>{if(state.mode==='web')locateHeader();},550);
     setTimeout(()=>autoCinema(false),1450);
   }
@@ -207,6 +286,7 @@
         if(dir==='UP')state.rail=Math.max(0,state.rail-1);
         if(dir==='DOWN')state.rail=Math.min(4,state.rail+1);
         if(dir==='RIGHT')state.area=state.cards.length?'grid':'search';
+        if(dir==='LEFT'&&state.nativePip)return 'pip';
       } else if(state.area==='search'){
         if(dir==='LEFT')state.area='rail';if(dir==='DOWN')state.area='grid';
       } else {
@@ -271,11 +351,13 @@
     searchField.dispatchEvent(new Event('change',{bubbles:true}));
     searchField.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}));
     const button=originalNav('Search');button?.click();
-    state.section='Search';shell.querySelector('#pftv-heading').textContent='Search results';
+    state.section='Search';state.cache=new Map();state.searching=true;setTimeout(()=>{state.searching=false;gatherMore();},1800);shell.querySelector('#pftv-heading').textContent='Search results';
     state.area='grid';state.selected=0;setTimeout(()=>refresh(true),480);setTimeout(()=>refresh(true),1800);
     search.blur();renderFocus();
   }
   search.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchSite(search.value);}});
+  // The Android native search dialog handles IME; the HTML field is never focused by TV navigation.
+  search.addEventListener('focus',()=>{if(state.mode==='tv')search.blur();});
   function locateHeader(){
     if(state.originalHeader?.isConnected)return;
     const nodes=Array.from(document.querySelectorAll('header,[role=banner],nav'))
@@ -401,7 +483,7 @@
   function activate(){
     if(state.mode==='tv'){
       if(state.area==='rail'){chooseSection(state.rail);return 'ok';}
-      if(state.area==='search'){search.focus();search.click();return 'keyboard';}
+      if(state.area==='search'){return 'search';}
       const c=state.cards[state.selected];if(!c)return 'empty';openCard(state.selected);return 'ok';
     }
     if(state.cinema)return togglePlayback();
@@ -432,9 +514,26 @@
       e.preventDefault();e.stopImmediatePropagation();navigate(e.key.slice(5).toUpperCase());
     }
   },true);
-  window.PFTV={version:4,key(k){if(k==='OK')return activate();return navigate(k);},activate,
+
+  function directStream(){
+    // Only ordinary exposed media URLs. Never sniff, decrypt, or bypass an iframe/DRM host.
+    const supported=/\.(?:m3u8|mpd|mp4|m4v|webm|mkv|mp3|aac)(?:$|[?#])/i;
+    const sources=[];
+    for(const v of document.querySelectorAll('video')){
+      if(!shell.contains(v))sources.push(v.currentSrc,v.src,...Array.from(v.querySelectorAll('source')).map(n=>n.src));
+    }
+    for(const a of document.querySelectorAll('a[href],source[src]')){
+      if(!shell.contains(a))sources.push(a.href||a.src);
+    }
+    const url=sources.find(u=>{
+      try{return u && /^https?:$/i.test(new URL(u,location.href).protocol)&&supported.test(u);}catch(_){return false;}
+    });
+    return url?JSON.stringify({url:new URL(url,location.href).href,referer:location.href}):'';
+  }
+  function nativePip(on){state.nativePip=!!on;const foot=shell.querySelector('#pftv-rail-footer');if(foot)foot.textContent=on?'◀ from sidebar: Mini-player\nOK: play/pause or expand':'D-pad to move · OK to open\nMenu for settings and player';return true;}
+  window.PFTV={version:5,key(k){if(k==='OK')return activate();return navigate(k);},activate,
     back,enterTV,enterWebsite,isTvMode:()=>state.mode==='tv',isCinema:()=>!!state.cinema,
     hasPlayer,cinema,exitCinema,zoom,setZoom:zoom,seek,seekPercent,seekTo,togglePlayback,chooseSources,focusPlayer,
-    isEditing:()=>document.activeElement===search,toast};
-  zoom(window.__PFTV_ZOOM||85);refresh(true);renderFocus();
+    isEditing:()=>false,search:searchSite,directStream,nativePip,toast};
+  zoom(window.__PFTV_ZOOM||85);refresh(true);renderFocus();setTimeout(gatherMore,900);
 })();

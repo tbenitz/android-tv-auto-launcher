@@ -1,39 +1,31 @@
-# PirateFlix TV 2.0 — Android TV browsing shell
+# PirateFlix TV 2.2 — Android TV grid + native playback
 
-A TV-first wrapper for **https://pirate-flix.pages.dev/**. The catalog is read from the live website (no fake titles/channels), so the APK can display the site's real movie/channel cards in a dedicated TV grid. The underlying website remains responsible for content listings, playback and source/episode selection.
+This Android TV browser wraps `https://pirate-flix.pages.dev/` and builds a TV-friendly browsing interface from the **actual page content** (not a hard-coded catalog). Android System WebView must be installed and the site must be reachable.
 
-## New experience
+## TV layout and browsing
 
-- **TV grid:** separate fullscreen, scrolling poster/channel grid with a left-hand Movies / TV Shows / Live TV / Watch Later / Website view rail. The webpage's desktop header is no longer drawn over the grid. The TV shell rebuilds when the site updates its titles.
-- **D-pad / Enter:** move selection in the grid and press OK to open a real website card. Navigation avoids Favorite buttons nested inside Live TV channel cards. Search opens the software keyboard only when OK is pressed on the Search field.
-- **Website/detail view:** opens after selecting a TV card, hiding the site's large top header; select episodes and sources using real page controls. Press Back to return to the TV grid.
-- **Fullscreen:** compatible video / embedded player elements can be isolated from the site header and expanded across the screen. The player is not replaced with an unrelated source.
-- **Zoom:** menu → Page zoom from 40%, 50%, 60%, 70%, 80%, 85%, 90%, 100%, 115%, 125%, 140%, or 160%. This controls the underlying website; the TV grid keeps a readable layout.
-- **Playback controls where supported:** Left/Right skips 15 s, held Left/Right accelerates up to 240 seconds per second; playback can be jumped to 10/25/50/75/90% or an exact time using Menu. A frame bridge attempts seeking in compatible embedded HTML5 players.
-- **Direct player key mode:** Menu → Player remote passthrough sends the remote directly to embedded/native player controls when the HTML5 seek bridge is unsupported. Menu remains accessible to switch back.
-- **Clear failure behavior:** cross-origin hosts that don't expose controllable HTML5 video cannot be forced to seek by a WebView. The app reports unsupported seeking rather than claiming success. Use the actual site's source selection or a different compatible source.
-- **Ad domain blocking:** conservative known-ad-host list; avoids intercepting normal media sources. No privileged VPN or DRM bypass.
-- **Remembers the last website page** as a URL.
+- Exactly **five poster columns**, with **three complete visible rows**; use the D-pad to scroll more titles.
+- Loads poster URLs from `<img>`, lazy image attributes, and `<picture>` sources, and scans additional offscreen results. The catalog depends on the website's DOM and does not synthesize nonexistent titles or channels.
+- Search: move to Search using the D-pad and press **OK**. A **native Android TV keyboard dialog** opens. Choose Search to apply the query to the website and rebuild the grid.
+- Movies / TV Shows / Watch Later use the site's corresponding tabs.
+- Live TV: chooses the site's **US** filter where identifiable and only shows known-US channel cards, or cards from a confirmed US-filtered site view. If the site exposes no region metadata/control, the app explicitly says so rather than labeling unverified channels as US.
+- Title selection fades the grid and opens its page. Select a source/episode using the website as needed.
+- Website view's page zoom remains adjustable from **40% to 160%**.
 
-## Remote controls
+## Native video and mini-player
 
-| Button | TV grid | Website / player |
-|---|---|---|
-| D-pad | Move rail/grid selection | Move site focus; Left/Right seeks when a player is detected |
-| OK | Open selected category, card or search field | Select focused button or play/pause in cinema mode |
-| Back | Exit / browser menu | Return to TV grid or exit cinema first |
-| Hold OK, Hold Back, Menu, Info | App control menu | App control menu |
-| Menu → TV grid | TV browsing layout | Return to TV browsing layout |
-| Menu → Website view | Original website controls without top banner | Browse sources, filters, episodes |
-| Menu → Fullscreen current player | — | Attempts fullscreen video isolation |
-| Menu → Change video source | — | Highlight an actual website source control when available |
+For **direct, accessible HTTP(S) media URLs** exposed by a page (`<video>`, `<source>`, or a direct link ending in mp4, m3u8, mpd, m4v, webm, mkv), the app can switch to a separately controlled Media3/ExoPlayer video surface. It supports MP4, DASH, HLS, and other formats supported by Android decoders. Direct stream selection is not always possible; the site may use a third-party iframe/DRM or transient blob URL. **The app does not extract protected streams, bypass CORS/DRM, or guarantee all sources work.**
 
-## Build
+- Native fullscreen **Left/Right**: 15-second tap; keep held to accelerate up to 240 seconds per second. **Menu → Seek** has direct percentages and jump to exact time.
+- Native fullscreen **Back**: return to the **TV grid** with a **bottom-left mini-player**, keeping playback and position.
+- From the sidebar press **Left** to focus the mini-player. Use **Left/Right** to choose **Play/Pause** or **Full screen**, press OK to activate. Press Up/Down to return to the grid. You can also access mini-player actions from Menu.
+- **Menu → Use native player** retries opening a direct URL exposed by the current site page. Unsupported embedded players use the WebView fallback.
+- A successful native player will pause the webpage's own HTML5 video to avoid duplicate audio. Close mini-player in Menu to stop it.
 
-The source is published to [the `pirateflix-tv-wrapper` branch](https://github.com/tbenitz/android-tv-auto-launcher/tree/pirateflix-tv-wrapper). GitHub Actions creates a debug signed `PirateFlix-TV.apk` artifact. Android TV 6+ (API 23+) / Mi Box compatible, dependent on Android System WebView.
+## GitHub APK build
 
-Note: GitHub Actions debug builds may use different signing keys. If an update fails to install over an older version, uninstall the old package first; doing so clears its local website data.
+GitHub Actions builds a debug APK after changes to the `pirateflix-tv-wrapper` branch in `tbenitz/android-tv-auto-launcher`, and offers it under the artifact **PirateFlix-TV-APK**. The existing launcher's `main` branch is unchanged.
 
-## Technical limitations
+Requirements: Android TV 6.0+, Android System WebView, network access. Media3 1.5.1 is included at build time. Debug APK signatures may differ between Actions runs; if an upgrade reports a signature conflict, uninstall and reinstall (this clears local app data).
 
-This APK does not control the website's unpublished source code. It creates a TV layout from the current site's DOM, so significant changes to the website's markup could require an update. It cannot guarantee playback or seek in a proprietary or DRM-protected third-party iframe. Direct/native stream playback would require an explicit supported media URL from the website or authorized streaming source and a separate player integration.
+**Not yet verified on physical TV hardware.** The web site can change HTML/JavaScript independently of this app, so poster and channel extraction requires follow-up testing against the actual live site.
