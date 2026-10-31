@@ -4,6 +4,18 @@ A lightweight, remote-controlled Android TV HOME replacement that lets you choos
 
 > **State of project:** Source and automated build pipeline provided. Actual hardware behavior has **not** been verified on every Android TV/Google TV firmware. GitHub Actions produces an APK after the code is uploaded; no APK binary is committed to the repository.
 
+## New in v1.1.0 — Favorites Home screen
+
+This version turns the original setup screen into a remote-friendly Home launcher. It includes a scrolling app-icon **favorites grid** (3, 4, 5 or 6 columns), a prominent **startup app** card, a searchable **All apps** chooser, hold-OK actions to reorder and unpin favorites, and a separate **Settings** panel. Startup apps are automatically pinned to favorites. Existing v1.0 selections migrate into the grid.
+
+**Remote controls:** D-pad navigates, OK opens, hold OK on a favorite for options, Home returns here, Back at Home does not close the launcher. In All apps, OK opens the action menu and holding OK pins that app.
+
+**Settings:** auto-start toggle, startup app, immediate/1/3/5 second boot delay (immediate is default), grid size, clock, Ocean/Charcoal theme, app management, change default Home, Mi Box help, Android system settings, and clear startup selection (favorites remain). No network permissions or tracking.
+
+**Boot transition:** The Home grid is no longer constructed before the automatic startup launch; the target starts immediately from the foreground Home Activity. The window background remains dark during any optional startup delay. Device firmware and the target app can still show their own transitions: a completely invisible launcher-to-app transition is not guaranteed.
+
+**APK signing warning:** Previous CI APKs were signed by a temporary debug key. Installing this build may require re-enabling the original Home first, uninstalling the old version, installing v1.1.0, choosing the startup app again, and reassigning the Home role. Use a persistent private signing keystore for seamless future upgrades.
+
 ## Features
 
 - Select from installed TV apps and sideloaded apps that provide a launcher activity.
