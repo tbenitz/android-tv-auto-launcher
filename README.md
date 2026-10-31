@@ -1,61 +1,50 @@
-# PirateFlix TV — fullscreen Android app
+# PirateFlix TV — Android fullscreen browser (v1.1)
 
-A minimal, remote-friendly Android APK that opens **https://pirate-flix.pages.dev/** as a full-screen website. It is a WebView wrapper, **not** a copy of the website, content catalog, or independent media player.
+Dedicated Android TV / Mi Box WebView app for https://pirate-flix.pages.dev/. The site itself supplies movie lists, playback and the available source choices; this project does not host media or invent streams.
 
-## What it does
+## TV controls
 
-- **Edge-to-edge fullscreen** website; no browser address bar or permanent toolbar.
-- **Open last page on restart.** Saves the website's last URL as you navigate, including routes and query parameters. Existing cookies and site local storage are handled by Android WebView.
-- **Go Home anytime** via the remote MENU button or by holding BACK for about 0.65 seconds. The menu also includes Back, Reload, and Exit.
-- **Back one page** with a short press of BACK; when there is no browser history, it shows the menu instead of immediately exiting.
-- **HTML5 fullscreen video**, including user-initiated fullscreen playback.
-- **TV remote D-pad / OK** and ordinary taps supported by Android WebView, with a standard Android file chooser for any file inputs.
-- **Android TV launcher tile** and ordinary Android phone/tablet launcher entry. No account, settings screen, or API key needed.
-- **Automatic retry screen** if the main website cannot load; Chrome/WebView manages its usual browser cache and cookies.
+| TV remote | Browsing | Video / cinema |
+|---|---|---|
+| D-pad ↑ / ↓ | Move focused tile vertically; scroll long pages/lists as needed | Reserved for web video UI where available |
+| D-pad ← / → | Move focus horizontally | Seek 15 seconds for a tap; hold to accelerate towards **240 seconds per second** |
+| OK / Enter | Open selected item, **only open search keyboard when selected and OK is pressed** | Toggle play / pause when HTML5 video controls are accessible |
+| Hold OK (0.65 seconds) | App control menu | App control menu, including **Change video source** |
+| Short Back | Back website page / close keyboard | Close fullscreen first |
+| Hold Back (0.65 seconds) | Home/back/source/player/zoom menu | Same menu |
+| Menu or Info | App control menu | Same menu |
+| Media FF / RW | Seek compatible HTML5 video | Progressive seek |
 
-> **Restore scope:** The app remembers the last URL on `pirate-flix.pages.dev`. It does not save a video's exact playback position or website views that don't change URL; those depend on what the website itself stores in the browser. Links to unrelated sites are not restored on startup.
->
-> **Media limitations:** Playback and DRM depend on the website and the installed **Android System WebView**. An embedded video or codec unsupported by that system component may not work simply because this wrapper is installed.
+**Source selection:** choose **Change video source (site picker)** from the app menu. The app returns to the webpage and highlights any source/server/mirror button that the page exposes. The site—not the APK—owns the actual source URLs, so switching depends on its controls.
 
-## Install the APK from GitHub Actions
+**Automatic cinema mode:** compatible HTML5 videos are promoted to edge-to-edge cinema view on playback. Large embedded video iframes are expanded after selecting Watch/Play or entering a video view. Press Back to return to the source and episode page. Native WebChrome fullscreen video remains supported.
 
-1. Create a new public repository named `pirateflix-tv-android` at https://github.com/new (if one does not exist).
-2. Upload **all the files and folders inside this ZIP**, preserving their paths including the hidden `.github/workflows/build-apk.yml` file, to the repository's main branch. You can also push them with Git.
-3. In the repository, open **Actions → Build Android APK**. The push build runs automatically if Actions are enabled; otherwise use **Run workflow**.
-4. After the build finishes successfully, open the run's **Artifacts**, download `PirateFlix-TV-APK` (ZIP), and extract `PirateFlix-TV.apk`.
-5. Copy the APK onto your TV (USB, shared folder, or file-transfer app), allow installation from that source, and install. The app appears as **PirateFlix TV** in your TV's app list.
+**Seeking limitation:** many websites use cross-origin iframes for their video players. Android WebView cannot read/control `currentTime` inside those third-party iframes; the progressive seek feature works only when an HTML5 media element is accessible to the site page. For incompatible players the app leaves the native player's own controls available rather than pretending to seek.
 
-**No Android Studio or local build tools required** for the GitHub build. Artifacts may require signing in to GitHub to download. Each default workflow build is debug-signed with the runner's Android debug key; later builds may have a different signature, so you may have to uninstall before installing a new build. For seamless upgrades, configure a persistent release-signing keystore and a release build before distributing updates.
+**Page scale:** default 115% (larger TV labels and tiles). Choose 90%, 100%, 115%, 125% or 140% from **Hold OK → Page size / zoom**. Zoom preference survives restarts.
 
-## Optional local build
+**Lightweight ad filtering:** intercepts requests to a curated set of known advertising/malvertising domains and discards unwanted cross-origin popups. Does not replace a full desktop ad blocker, and aggressive filtering may affect some streaming hosts. This app cannot prevent ads drawn directly by the site or inside a cross-origin video iframe.
 
-With JDK 17+, the Android SDK 35 installed, and Gradle 8.10.2:
+**Last-page restore:** automatically saves the last first-party URL and restores it on reopening. The website manages its own browser storage and playback resume.
 
-```sh
-gradle assembleDebug
-```
+## Build on GitHub
 
-The installable APK is then at `app/build/outputs/apk/debug/app-debug.apk`.
+This project lives on branch [`pirateflix-tv-wrapper`](https://github.com/tbenitz/android-tv-auto-launcher/tree/pirateflix-tv-wrapper) of an existing repository. The main branch and the original TV launcher are unchanged.
 
-## Controls
+1. Visit **[Build PirateFlix TV APK — Actions](https://github.com/tbenitz/android-tv-auto-launcher/actions/workflows/build-apk.yml)**.
+2. Select the `pirateflix-tv-wrapper` branch, trigger **Run workflow** if necessary, and open the latest successful run.
+3. In **Artifacts**, download `PirateFlix-TV-APK` and extract the installable `PirateFlix-TV.apk`.
+4. Sideload the APK on your Android TV box using your preferred file manager.
 
-| Remote action | Result |
-|---|---|
-| D-pad / OK | Navigate and interact with the website (where supported by the webpage) |
-| Short BACK | Exit fullscreen video first, otherwise previous webpage; shows menu if at start |
-| Hold BACK for about 0.65 seconds | Open navigation menu |
-| MENU button | Open navigation menu |
-| Menu → Go to PirateFlix Home | Navigate to homepage and clear WebView back history |
-| Menu → Reload page | Refresh current page |
-| Menu → Exit app | Close the app |
+Build environment: Ubuntu, JDK 17, Android SDK 35, Gradle 8.10.2, and an automatic debug-signed APK. Android 6.0+ minimum. Debug-signed APKs created in different CI runs may use different keys, so installing a newer build may require uninstalling the older one (which clears the app's saved web data). Use a persistent release signing key for painless updates.
 
-## Files
+## Scope and security
 
-- `app/src/main/java/dev/pirateflix/tv/MainActivity.java` — WebView, navigation, fullscreen video, URL restoration.
-- `app/src/main/AndroidManifest.xml` — permissions and TV launcher intent.
-- `.github/workflows/build-apk.yml` — GitHub Actions APK build and optional tag release.
-- `app/src/main/res/drawable-nodpi/tv_banner.png` — Android TV launcher banner.
+App permission: INTERNET only. JavaScript and site browser storage are enabled because the website needs them. File access from the page is disabled. Third-party cookies stay enabled for embedded player compatibility. The app doesn't include an ad-blocking VPN or inspect HTTPS payloads. It doesn't bypass DRM/streaming restrictions or turn unsupported iframe players into native Android media players.
 
-## Privacy & scope
+### Files
 
-The app requests **INTERNET only**, and does not itself bundle content or host video. Page data and network requests go to the destination site (and any third-party services it loads). The user is responsible for ensuring they access media lawfully. This is an independent WebView wrapper, not an official app or a substitute for the underlying website.
+- `app/src/main/java/dev/pirateflix/tv/MainActivity.java`: Android TV controls, WebView, video shortcuts and ad-domain interception.
+- `app/src/main/assets/tv-nav.js`: Web navigation and cinema integration. No libraries or trackers.
+- `app/src/main/AndroidManifest.xml`: Android/TV launcher and network permissions.
+- `.github/workflows/build-apk.yml`: GitHub APK build and artifact.
