@@ -70,53 +70,66 @@ public final class ApkCenterActivity extends Activity {
         Button back = button("← Home", () -> finish());
         top.addView(back);
         screen.addView(top);
-        screen.addView(label("Install apps from GitHub Releases, direct HTTPS links, or files on your TV. Android always asks you to approve installation.", 14, MUTED, false));
+        screen.addView(label("Install apps from public GitHub releases, trusted HTTPS URLs, or local files. Android confirms each installation.", 14, MUTED, false));
 
-        screen.addView(label("GITHUB RELEASES", 15, ACCENT, true), margins(0, 17));
+        LinearLayout body = row();
+        body.setPadding(0, dp(14), 0, 0);
+        screen.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout left = column();
+        body.addView(left, new LinearLayout.LayoutParams(0, -1, 1));
+        LinearLayout right = column();
+        right.setPadding(dp(20), 0, 0, 0);
+        body.addView(right, new LinearLayout.LayoutParams(0, -1, 1));
+
+        left.addView(label("GITHUB RELEASES", 15, ACCENT, true));
+        left.addView(label("Find APK assets from the newest releases.", 12, MUTED, false));
         LinearLayout repoRow = row();
         repoRow.setGravity(Gravity.CENTER_VERTICAL);
-        repoField = field("owner/repository   or   github.com/owner/repository");
+        repoField = field("owner/repository");
         repoRow.addView(repoField, new LinearLayout.LayoutParams(0, dp(50), 1));
         repoButton = button("Find APKs", this::findReleases);
         repoRow.addView(repoButton);
-        screen.addView(repoRow);
+        left.addView(repoRow, margins(0, 6));
 
-        screen.addView(label("DIRECT APK DOWNLOAD", 15, ACCENT, true), margins(0, 17));
+        left.addView(label("DIRECT APK DOWNLOAD", 15, ACCENT, true), margins(0, 23));
+        left.addView(label("Paste a trusted HTTPS link to a standalone APK.", 12, MUTED, false));
         LinearLayout directRow = row();
         directRow.setGravity(Gravity.CENTER_VERTICAL);
         urlField = field("https://example.com/app.apk");
         directRow.addView(urlField, new LinearLayout.LayoutParams(0, dp(50), 1));
-        downloadButton = button("Download", () -> confirmDownload(urlField.getText().toString().trim(), null, "Direct HTTPS APK"));
+        downloadButton = button("Download", () ->
+                confirmDownload(urlField.getText().toString().trim(), null, "Direct HTTPS APK"));
         directRow.addView(downloadButton);
-        screen.addView(directRow);
+        left.addView(directRow, margins(0, 6));
+        left.addView(label("Downloads are limited to 400 MB and checked as APKs before installation.", 12, MUTED, false),
+                margins(0, 12));
 
-        screen.addView(label("OTHER SOURCES", 15, ACCENT, true), margins(0, 17));
+        right.addView(label("LOCAL AND ALTERNATIVE SOURCES", 15, ACCENT, true));
         LinearLayout quick = row();
-        quick.setGravity(Gravity.CENTER_VERTICAL);
-        Button files = button("USB / File picker", this::pickFile);
-        quick.addView(files);
-        quick.addView(button("Install F-Droid", () ->
-                confirmDownload("https://f-droid.org/F-Droid.apk", null, "Official F-Droid installer")));
-        quick.addView(button("Unknown-app permission", this::openPermissionSettings));
-        screen.addView(quick);
+        Button files = button("USB / Files", this::pickFile);
+        quick.addView(files, new LinearLayout.LayoutParams(0, dp(49), 1));
+        Button fdroid = button("Get F-Droid", () ->
+                confirmDownload("https://f-droid.org/F-Droid.apk", null, "Official F-Droid installer"));
+        quick.addView(fdroid, new LinearLayout.LayoutParams(0, dp(49), 1));
+        right.addView(quick, margins(0, 7));
+        right.addView(button("Allow unknown-app installation", this::openPermissionSettings),
+                margins(0, 8));
 
-        screen.addView(label("Saved GitHub repository", 13, MUTED, false), margins(0, 19));
-        LinearLayout saved = row();
+        right.addView(label("SAVED GITHUB REPOSITORY", 13, ACCENT, true), margins(0, 13));
         String recent = getPreferences(MODE_PRIVATE).getString("saved_repo", "");
-        Button recentButton = button(recent.isEmpty() ? "No saved repository" : recent, () -> {
+        Button recentButton = button(recent.isEmpty() ? "None yet" : recent, () -> {
             String r = getPreferences(MODE_PRIVATE).getString("saved_repo", "");
             if (!r.isEmpty()) { repoField.setText(r); findReleases(); }
         });
         recentButton.setEnabled(!recent.isEmpty());
-        saved.addView(recentButton);
-        screen.addView(saved);
+        right.addView(recentButton, margins(0, 5));
 
-        status = label("Select a source. APK downloads are limited to 400 MB. Never install software from a source you do not trust.", 14, MUTED, false);
-        status.setPadding(dp(12), dp(12), dp(12), dp(12));
+        status = label("Select a source. Use only APKs from developers you trust.", 13, MUTED, false);
+        status.setPadding(dp(11), dp(10), dp(11), dp(10));
         status.setBackground(panel(PANEL));
-        screen.addView(status, margins(0, 20));
-        installButton = button("Install last downloaded APK", this::installDownloaded);
-        screen.addView(installButton, margins(0, 10));
+        right.addView(status, margins(0, 12));
+        installButton = button("Install downloaded APK", this::installDownloaded);
+        right.addView(installButton, margins(0, 7));
         installButton.setEnabled(false);
         files.requestFocus();
     }
