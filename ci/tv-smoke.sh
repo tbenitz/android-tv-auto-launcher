@@ -21,6 +21,27 @@ grep -q "AUTO LAUNCH" /tmp/window.xml || { echo "Expected native Home screen not
 grep -q "Apps" /tmp/window.xml || { echo "Apps navigation missing"; exit 1; }
 grep -q "Settings" /tmp/window.xml || { echo "Settings navigation missing"; exit 1; }
 
+
+# Verify the actual app-picker route, not just the initial Home layout.
+adb shell input tap 1540 90
+sleep 3
+adb shell uiautomator dump /sdcard/apps.xml >/dev/null
+adb shell cat /sdcard/apps.xml > /tmp/apps.xml
+grep -q "Installed TV apps" /tmp/apps.xml || { echo "All Apps screen did not open"; cat /tmp/apps.xml; exit 1; }
+adb shell screencap -p /sdcard/tv-apps.png
+adb pull /sdcard/tv-apps.png tv-apps.png >/dev/null
+
+# On the 1920 x 1080 TV AVD, the first visible app tile is near (160,380).
+# Tapping it must show a real app-actions dialog, not the old blank zero-height list.
+adb shell input tap 170 360
+sleep 2
+adb shell uiautomator dump /sdcard/actions.xml >/dev/null
+adb shell cat /sdcard/actions.xml > /tmp/actions.xml
+grep -q "Set as startup app" /tmp/actions.xml || { echo "App actions unavailable"; cat /tmp/actions.xml; exit 1; }
+adb shell screencap -p /sdcard/tv-app-actions.png
+adb pull /sdcard/tv-app-actions.png tv-app-actions.png >/dev/null
+adb shell input keyevent KEYCODE_BACK
+
 adb shell input keyevent KEYCODE_DPAD_RIGHT
 adb shell input keyevent KEYCODE_DPAD_LEFT
 adb shell input keyevent KEYCODE_DPAD_DOWN

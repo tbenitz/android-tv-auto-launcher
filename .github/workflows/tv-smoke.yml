@@ -43,5 +43,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tv-preview-smoke-screenshot
-          path: tv-preview.png
+          path: |
+            tv-preview.png
+            tv-apps.png
+            tv-app-actions.png
           if-no-files-found: ignore
