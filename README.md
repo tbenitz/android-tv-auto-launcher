@@ -10,6 +10,7 @@ A TV-first wrapper for **https://pirate-flix.pages.dev/**. The catalog is read f
 - **Fullscreen:** compatible video / embedded player elements can be isolated from the site header and expanded across the screen. The player is not replaced with an unrelated source.
 - **Zoom:** menu → Page zoom from 40%, 50%, 60%, 70%, 80%, 85%, 90%, 100%, 115%, 125%, 140%, or 160%. This controls the underlying website; the TV grid keeps a readable layout.
 - **Playback controls where supported:** Left/Right skips 15 s, held Left/Right accelerates up to 240 seconds per second; playback can be jumped to 10/25/50/75/90% or an exact time using Menu. A frame bridge attempts seeking in compatible embedded HTML5 players.
+- **Direct player key mode:** Menu → Player remote passthrough sends the remote directly to embedded/native player controls when the HTML5 seek bridge is unsupported. Menu remains accessible to switch back.
 - **Clear failure behavior:** cross-origin hosts that don't expose controllable HTML5 video cannot be forced to seek by a WebView. The app reports unsupported seeking rather than claiming success. Use the actual site's source selection or a different compatible source.
 - **Ad domain blocking:** conservative known-ad-host list; avoids intercepting normal media sources. No privileged VPN or DRM bypass.
 - **Remembers the last website page** as a URL.

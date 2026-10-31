@@ -72,6 +72,7 @@ public final class MainActivity extends Activity {
     private boolean okMenuShown;
     private boolean leftHeld;
     private boolean rightHeld;
+    private boolean passthroughPlayerKeys;
     private final Runnable longOkAction = () -> {
         if (okHeld) { okMenuShown = true; showNavigationMenu(); }
     };
@@ -519,6 +520,15 @@ public final class MainActivity extends Activity {
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         final int code = event.getKeyCode();
+        // Optional passthrough: let inaccessible iframe/native player controls receive remote keys.
+        // Back/Menu/Info remain handled by this activity so the user can always exit this mode.
+        if (passthroughPlayerKeys && (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN ||
+                code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER ||
+                code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD || code == KeyEvent.KEYCODE_MEDIA_REWIND ||
+                code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)) {
+            return super.dispatchKeyEvent(event);
+        }
         boolean down = event.getAction()==KeyEvent.ACTION_DOWN;
         boolean up = event.getAction()==KeyEvent.ACTION_UP;
         if (code == KeyEvent.KEYCODE_BACK) {
@@ -594,6 +604,7 @@ public final class MainActivity extends Activity {
     }
 
     private void goHome() {
+        passthroughPlayerKeys = false;
         stopSeek();
         if (customVideoView != null) exitFullScreenVideo();
         hideKeyboard();
@@ -625,12 +636,13 @@ public final class MainActivity extends Activity {
                 "TV grid / Browse", "Website view (sources, episodes & details)",
                 "Go to PirateFlix Home", "Previous web page", "Play / Pause",
                 "Seek / Jump to position", "Change video source", "Fullscreen current player",
-                "Page zoom 40%–160%", "Reload website", "Exit app"
+                "Page zoom 40%–160%", "Player remote passthrough ON/OFF", "Reload website", "Exit app"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("PirateFlix TV • Controls")
                 .setItems(options, (d, choice) -> {
                     if (choice == 0) {
+                        passthroughPlayerKeys = false;
                         if (customVideoView != null) exitFullScreenVideo();
                         evaluateTv("window.PFTV&&window.PFTV.enterTV()");
                     }
@@ -645,8 +657,16 @@ public final class MainActivity extends Activity {
                     }
                     if (choice == 7) evaluateTv("window.PFTV&&window.PFTV.cinema(true)");
                     if (choice == 8) showZoomMenu();
-                    if (choice == 9 && webView != null) { errorPanel.setVisibility(View.GONE); webView.reload(); }
-                    if (choice == 10) finish();
+                    if (choice == 9) {
+                        passthroughPlayerKeys = !passthroughPlayerKeys;
+                        if (passthroughPlayerKeys) {
+                            if (webView != null) webView.requestFocus();
+                            evaluateTv("window.PFTV&&window.PFTV.focusPlayer()");
+                            showStatus("Direct player keys ON · Menu to turn off");
+                        } else showStatus("TV navigation keys restored");
+                    }
+                    if (choice == 10 && webView != null) { errorPanel.setVisibility(View.GONE); webView.reload(); }
+                    if (choice == 11) finish();
                 })
                 .setNegativeButton("Cancel", null).create();
         dialog.setOnDismissListener(d -> applyImmersiveMode());
