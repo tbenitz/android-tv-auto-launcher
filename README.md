@@ -1,4 +1,4 @@
-# TV Auto Launch — v1.2.0-rc1 stability preview
+# TV Auto Launch — v1.2.0-rc2 stability preview
 
 > **Safety notice:** Do NOT change your TV's default Home launcher to this preview before testing it. A freeze was reported with v1.1.1 on Mi Box. Downloads on the GitHub Pages landing site are paused until the redesigned launcher has been checked on physical hardware. Previous versions should not be used as Home.
 
@@ -12,9 +12,12 @@
 - If an app is missing or fails to launch, the Home screen remains accessible.
 - No remote ADB, internet, accessibility, or root permissions are requested by the launcher.
 
+## Preview is isolated from your old launcher
+Debug builds use the distinct app package **`io.github.tbenitz.tvautolaunch.preview`**, install alongside the disabled production launcher, and are labeled **TV Auto Launch Preview**. They do not replace or re-enable the broken app. This helps avoid signature errors and keeps the existing Home package untouched. The preview still supports becoming HOME, but **do not choose it as Home before manually testing its screens**.
+
 ## Safe test plan (without changing your working Mi Box Home)
 1. Restore and retain your original Mi Box Home, as you already did.
-2. Install this preview as an ordinary sideloaded app. If an earlier APK signature conflicts, keep original Home enabled, uninstall the previous TV Auto Launch APK, and then install this preview.
+2. Install this preview as an ordinary sideloaded app. The preview has a different package identifier, so it installs alongside the disabled old app; no uninstall is required.
 3. Open TV Auto Launch from your original TV's Apps list.
 4. Confirm **All apps** opens, icons load, D-pad can move through every row, OK shows actions, you can add/remove favorites, set a startup target, launch another app and return, and enter Android settings.
 5. **Do not assign it as Home until those tests succeed.** This GitHub APK is a preview, not a firmware-verified fix.
@@ -23,10 +26,10 @@
 **Only if** your original Xiaomi Android TV Home package is `com.google.android.tvlauncher`:
 ```sh
 pm enable --user 0 com.google.android.tvlauncher
-pm disable-user --user 0 io.github.tbenitz.tvautolaunch
+pm disable-user --user 0 io.github.tbenitz.tvautolaunch.preview
 input keyevent 3
 ```
-Verify that the first command succeeded before disabling this launcher. This leaves the app installed and retains its settings. Do not factory reset or uninstall a launcher while it is the only enabled HOME handler.
+Those recovery commands are for the preview app. To disable the older non-preview app instead, use `io.github.tbenitz.tvautolaunch`. Verify that the first command succeeded before disabling any launcher. This leaves the app installed and retains its settings. Do not factory reset or uninstall a launcher while it is the only enabled HOME handler.
 
 ## Building
 The workflow on GitHub Actions builds Android API 35, Java 17, Gradle 8.9. Preview APKs use an ephemeral CI debug signer; Android generally cannot update an APK that was signed by a different debug key. Stable publishing requires a persistent private release keystore, not a key committed to the public repository.

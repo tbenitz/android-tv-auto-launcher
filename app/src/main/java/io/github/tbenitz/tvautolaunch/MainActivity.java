@@ -683,7 +683,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showRecoveryHelp() {
-        final String app = "io.github.tbenitz.tvautolaunch";
+        final String app = getPackageName();
         final String restore = "pm enable --user 0 com.google.android.tvlauncher\n"
                 + "pm disable-user --user 0 " + app + "\n"
                 + "input keyevent 3";
